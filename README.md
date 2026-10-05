@@ -7,6 +7,16 @@ the thrust. Every motor has its own model. Any rotor geometry works: quad, hexa,
 coaxial. A cascaded PID (untuned or tuned) flies paths and waypoints, and a Gymnasium-style environment
 lets you train your own controllers.
 
+### ▶ [Play it in the browser](https://writerforight.github.io/drone-wind-sim/)
+
+Fly an Iris, an X500, a Crazyflie or a hexa/octo through a ring course in wind, turbulence and gusts. There
+are three modes: *Assist* holds the drone's position like GPS mode, *Angle* leaves the wind to you, and
+*Autopilot* lets the PID fly. You can set the wind, temperature and altitude, trigger a gust, or click a
+motor to make it fail. The browser version is a JavaScript port of the same simulator (`web/sim.js`). On
+deterministic test flights it matches the Python package to 10⁻¹³ m (`web/parity_test.js`).
+
+[![Browser game: Iris on autopilot flying through the ring course, wind streaks, motor bars and compass](docs/play.png)](https://writerforight.github.io/drone-wind-sim/)
+
 ![The environment: wind severities, height profile, turbulence spectrum vs. theory, thrust vs. temperature](docs/environment.png)
 
 ## What is modelled
@@ -138,6 +148,13 @@ wraps the environment as a real `gymnasium.Env` if Gymnasium is installed (for S
 - the tuned PID holds position in wind on every airframe while the untuned one drifts;
 - all four environment modes run.
 
+`web/parity_test.js` runs the browser port and the Python simulator on the same six flights and checks that
+the trajectories match:
+
+```bash
+python web/parity_ref.py > /tmp/ref.json && node web/parity_test.js /tmp/ref.json
+```
+
 ## Roadmap
 
 1. ~~Environment: atmosphere, wind, turbulence, gusts, sensors~~
@@ -146,7 +163,7 @@ wraps the environment as a real `gymnasium.Env` if Gymnasium is installed (for S
 4. ~~Waypoints and path following~~; minimum-snap trajectories
 5. Adaptive control: INDI, a learned wind model with online adaptation (Neural-Fly-style),
    fault-aware allocation, and an RL baseline
-6. 3D web viewer of logged flights
+6. ~~Browser version (playable)~~; replay of logged Python flights in the browser
 
 ## Author
 

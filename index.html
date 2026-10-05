@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drone Wind Sim</title>
+<meta name="description" content="Fly a physically simulated drone in wind, Dryden turbulence and gusts in the browser: PX4 Iris, PX4 X500, Crazyflie and generic frames; assist, angle and autopilot modes; ring course. By Eren Can Almaz.">
+<meta name="author" content="Eren Can Almaz">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚁</text></svg>">
+<style>
+  :root { --bg: #0d1117; --panel: #161b22; --panel2: #1c2230; --line: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #2f81f7; --pos: #e3b341; --neg: #bc8cff; --ok: #3fb950; --warn: #f0883e; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif; overflow: hidden; }
+  header { height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 15px; margin: 0; font-weight: 650; white-space: nowrap; }
+  header .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header .grow { flex: 1; }
+  header a { color: var(--accent); }
+  #app { display: flex; height: calc(100% - 44px); }
+  aside { width: 300px; flex: none; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--line); padding: 4px 12px 16px; }
+  main { flex: 1; position: relative; min-width: 0; }
+  #view { position: absolute; inset: 0; }
+  details.sec { border-bottom: 1px solid var(--line); }
+  details.sec > summary { list-style: none; cursor: pointer; padding: 10px 0; display: flex; align-items: baseline; gap: 6px; }
+  details.sec > summary::-webkit-details-marker { display: none; }
+  details.sec > summary::before { content: '›'; display: inline-block; width: 10px; color: var(--muted); transition: transform .15s; }
+  details.sec[open] > summary::before { transform: rotate(90deg); }
+  .sec-title { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 650; }
+  .sec-info { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+  .sec-body { padding: 0 0 12px; }
+  .row { display: grid; grid-template-columns: 96px 1fr 44px; align-items: center; gap: 8px; margin: 6px 0; }
+  .row.two { grid-template-columns: 96px 1fr; }
+  .row label { color: var(--muted); }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  select, button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; }
+  select { width: 100%; }
+  button { cursor: pointer; }
+  button:hover { border-color: #8b949e; }
+  button.on, button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .seg { display: flex; gap: 0; }
+  .seg button { flex: 1; border-radius: 0; margin-left: -1px; padding: 5px 4px; }
+  .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+  .seg button:last-child { border-radius: 0 6px 6px 0; }
+  .note { color: var(--muted); font-size: 12px; margin: 6px 0; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  kbd { display: inline-block; min-width: 18px; padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+    font: 11px ui-monospace, monospace; text-align: center; background: var(--panel2); }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; align-items: center; }
+  /* overlays on the 3D view */
+  .hud { position: absolute; background: rgba(13,17,23,.78); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+    font-variant-numeric: tabular-nums; pointer-events: none; backdrop-filter: blur(4px); }
+  #hudL { top: 12px; left: 12px; min-width: 190px; }
+  #hudL .big { font-size: 20px; font-weight: 650; }
+  #hudR { top: 12px; right: 12px; text-align: center; pointer-events: auto; }
+  #compass { display: block; }
+  #hudB { left: 50%; bottom: 12px; transform: translateX(-50%); pointer-events: auto; display: flex; gap: 10px; align-items: flex-end; }
+  #motors { display: flex; gap: 5px; align-items: flex-end; }
+  .motor { width: 22px; cursor: pointer; text-align: center; font-size: 10px; color: var(--muted); }
+  .motor .bar { height: 60px; border: 1px solid var(--line); border-radius: 4px; position: relative; overflow: hidden; background: #0b0f14; }
+  .motor .fill { position: absolute; left: 0; right: 0; bottom: 0; }
+  .motor.dead .bar { background: repeating-linear-gradient(45deg, #222 0 4px, #111 4px 8px); }
+  #spark { display: block; }
+  #center { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+  #center .msg { font-size: 26px; font-weight: 700; text-shadow: 0 2px 10px #000; }
+  #center .msg2 { color: var(--text); text-shadow: 0 2px 8px #000; margin-top: 6px; }
+  #toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); background: rgba(22,27,34,.92); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 12px; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  .warn { color: var(--warn); }
+  .ok { color: var(--ok); }
+  .hidden { display: none !important; }
+  @media (max-width: 760px) {
+    #app { flex-direction: column; }
+    aside { width: 100%; height: 42%; border-right: none; border-bottom: 1px solid var(--line); order: 2; }
+    main { height: 58%; order: 1; }
+    header .sub { display: none; }
+    #hudL { min-width: 0; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚁 Drone Wind Sim</h1>
+  <span class="sub">physically simulated flight in wind, turbulence and gusts — same model as the Python package</span>
+  <span class="grow"></span>
+  <a href="https://github.com/writerforight/drone-wind-sim" target="_blank" rel="noopener">GitHub</a>
+</header>
+<div id="app">
+  <aside>
+    <details class="sec" open data-sec="flight">
+      <summary><span class="sec-title">Flight</span><span class="sec-info" id="sumFlight"></span></summary>
+      <div class="sec-body">
+        <div class="row two"><label>Mode</label>
+          <div class="seg" id="modeSeg"><button data-v="assist" class="on" title="GPS hold: release the keys and the drone holds its position against the wind">Assist</button><button data-v="angle" title="You set the tilt; nothing holds the position — fight the wind yourself">Angle</button><button data-v="auto" title="The cascaded PID flies the course on its own">Autopilot</button></div></div>
+        <div class="row two"><label>Course</label>
+          <select id="course"><option value="rings">Ring course (race)</option><option value="eight">Figure-eight</option><option value="free">Free flight</option></select></div>
+        <div class="row two"><label>Controller</label>
+          <div class="seg" id="gainSeg"><button data-v="tuned" class="on" title="Cascaded PID with integral action">Tuned PID</button><button data-v="untuned" title="P only in the outer loops, soft inner loops: drifts in wind">Untuned</button></div></div>
+        <div class="note" id="modeNote"></div>
+        <div style="display:flex; gap:6px; margin-top:6px"><button id="resetBtn" class="primary" style="flex:1">↺ Restart <kbd>R</kbd></button><button id="pauseBtn" style="flex:1">⏸ Pause <kbd>P</kbd></button></div>
+        <div class="note" id="best"></div>
+      </div>
+    </details>
+    <details class="sec" open data-sec="drone">
+      <summary><span class="sec-title">Drone</span><span class="sec-info" id="sumDrone"></span></summary>
+      <div class="sec-body">
+        <div class="row two"><label>Airframe</label><select id="airframe">
+          <option value="iris">Iris — PX4 SITL parameters</option><option value="x500">X500 — PX4 parameters</option>
+          <option value="crazyflie">Crazyflie 2.X — 27 g</option><option value="quad_x">Quad X (generic 450)</option>
+          <option value="hexa_x">Hexa X (generic)</option><option value="octo_x">Octo X (generic)</option>
+          <option value="quad_asymmetric">Quad, asymmetric arms</option></select></div>
+        <div class="kv" id="droneInfo"></div>
+        <div class="note">Click a motor bar (bottom of the view) to damage it: 100 % → 50 % → failed. The controller is not told.</div>
+      </div>
+    </details>
+    <details class="sec" open data-sec="env">
+      <summary><span class="sec-title">Environment</span><span class="sec-info" id="sumEnv"></span></summary>
+      <div class="sec-body">
+        <div class="row"><label>Wind at 10 m</label><input id="windSpeed" type="range" min="0" max="20" step="0.5" value="5"><output id="windSpeedO"></output></div>
+        <div class="row"><label>From</label><input id="windDir" type="range" min="0" max="355" step="5" value="270"><output id="windDirO"></output></div>
+        <div class="row two"><label>Turbulence</label><select id="turb"><option value="none">none</option><option value="light">light (Dryden)</option><option value="moderate" selected>moderate</option><option value="severe">severe</option></select></div>
+        <div class="row"><label>Gust</label><input id="gustSpeed" type="range" min="2" max="15" step="1" value="8"><output id="gustSpeedO"></output></div>
+        <div style="display:flex; gap:6px"><button id="gustBtn" style="flex:1">💨 Gust now <kbd>G</kbd></button><label class="note" style="display:flex;align-items:center;gap:4px;margin:0"><input id="autoGust" type="checkbox" checked> random gusts</label></div>
+        <div class="row"><label>Temperature</label><input id="temp" type="range" min="-20" max="45" step="1" value="15"><output id="tempO"></output></div>
+        <div class="row"><label>Site altitude</label><input id="alt" type="range" min="0" max="4000" step="100" value="0"><output id="altO"></output></div>
+        <div class="row two"><label>Sensors</label><select id="sensors"><option value="ideal">ideal</option><option value="good" selected>good (RTK-like)</option><option value="gps">GPS</option><option value="poor">poor</option></select></div>
+        <div class="kv" id="envInfo"></div>
+      </div>
+    </details>
+    <details class="sec" data-sec="keys">
+      <summary><span class="sec-title">Controls</span><span class="sec-info">keyboard · gamepad</span></summary>
+      <div class="sec-body keys">
+        <span><kbd>W</kbd><kbd>S</kbd></span><span>forward / back</span>
+        <span><kbd>A</kbd><kbd>D</kbd></span><span>left / right</span>
+        <span><kbd>Space</kbd><kbd>Shift</kbd></span><span>up / down</span>
+        <span><kbd>Q</kbd><kbd>E</kbd> or <kbd>←</kbd><kbd>→</kbd></span><span>turn</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd></span><span>forward / back</span>
+        <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>assist / angle / autopilot</span>
+        <span><kbd>G</kbd></span><span>gust now</span>
+        <span><kbd>C</kbd></span><span>camera: chase / orbit / top</span>
+        <span><kbd>R</kbd> <kbd>P</kbd></span><span>restart, pause</span>
+        <span>mouse</span><span>drag to look around, wheel to zoom</span>
+        <span>gamepad</span><span>mode 2: left stick throttle + yaw, right stick pitch + roll</span>
+      </div>
+    </details>
+    <details class="sec" data-sec="about">
+      <summary><span class="sec-title">About the physics</span></summary>
+      <div class="sec-body note" style="color:var(--text)">
+        <p>Everything is integrated at 500 Hz (RK4) from the same equations as the Python package: 6-DOF rigid body,
+          per-motor thrust <i>T = C<sub>T</sub> ρ n² D⁴</i> with spin-up / spin-down lag, drag relative to the moving air,
+          log-law wind, Dryden turbulence (MIL-F-8785C), 1 − cos gusts, ISA air density from temperature and altitude.
+          The browser version matches the Python simulator to 10⁻¹³ m on deterministic test flights.</p>
+        <p>The controller only knows the nominal model: it is not told the temperature, the altitude or which motor is
+          damaged. Iris and X500 use parameters from PX4's Gazebo models, the Crazyflie those of gym-pybullet-drones.</p>
+        <p>By <a href="https://writerforight.github.io" target="_blank" rel="noopener">Eren Can Almaz</a> ·
+          <a href="https://github.com/writerforight/drone-wind-sim" target="_blank" rel="noopener">source &amp; Python package</a></p>
+      </div>
+    </details>
+  </aside>
+  <main>
+    <div id="view"></div>
+    <div class="hud" id="hudL"></div>
+    <div class="hud" id="hudR"><canvas id="compass" width="120" height="120"></canvas><div id="windTxt"></div></div>
+    <div class="hud" id="hudB"><div id="motors"></div><canvas id="spark" width="220" height="64"></canvas></div>
+    <div id="center"><div class="msg" id="msg"></div><div class="msg2" id="msg2"></div></div>
+    <div id="toast"></div>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="web/sim.js"></script>
+<script src="web/app.js"></script>
+</body>
+</html>
