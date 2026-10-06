@@ -62,6 +62,32 @@ with both PIDs on the same unseen worlds. The placeholder there is a hand-writte
 trained network; it already cuts the untuned PID's hover error from 2.7 m to 0.8 m. That shows a learned
 model has a real signal to pick up. The tuned PID reaches 0.1 m.
 
+## Learned control loop (draft)
+
+A recurrent MLP flies the drone and is trained by **backpropagation through the simulator**:
+
+```
+[observation_t, memory_{t-1}]  --MLP-->  [u_t, memory_t]  ->  motors  ->  physics  ->  sensors  -> ...
+```
+
+The network never sees the wind, the payload or the air density. Its memory vector has to infer them from
+the sensor stream. `dronesim/diff/` is a batched PyTorch copy of the 6-DOF physics (it matches the NumPy
+version to 1e-12 m), so the distance to the target can be differentiated through motors, rigid-body
+dynamics and the memory over whole flights (truncated BPTT).
+
+- `learn/configs/default.json` holds the architecture, the loss weights (error, its 1st and 2nd derivative,
+  optional regularisers), targets with a curriculum, and world randomisation. You can change any of them without
+  touching code: `python -m learn.train --set model.hidden_state=64 loss.error_rate=0.1 control=motors`
+- control modes: `motors` (one output per rotor, end-to-end) or `thrust_rates` (collective thrust + body rates)
+- `python -m learn.evaluate runs/<name>/model.pt` flies the trained loop in the full NumPy simulator (Dryden, gusts,
+  sensor model) against the tuned PID
+- `python -m learn.export_web runs/<name>/model.pt --name <name>` puts it into the browser game
+  (Controller → **Learned NN**). `web/learned_parity_test.js` checks that the browser flies it like Python.
+
+Status: a first short training run (150 iterations, ~7 min on one CPU core) learns to hover and to step to
+points in wind in both modes, including `motors`, where attitude control is learned from the distance loss alone.
+In the game it is available for the Quad X. Longer runs and a comparison with the PID follow.
+
 ## Real drones with published parameters
 
 Besides the generic frames (quad X/+, hexa, octo, asymmetric quad, or your own), three real drones are
@@ -90,7 +116,7 @@ In turbulence the Crazyflie is already lost at 6 m/s mean wind, because its gust
 ## Quick start
 
 ```bash
-pip install numpy scipy matplotlib        # torch only for later learning-based controllers
+pip install numpy scipy matplotlib        # + torch for learn/ (the learned control loop)
 python tests/test_physics.py              # physics checks
 python examples/01_environment.py         # -> docs/environment.png
 python examples/02_pid_untuned_vs_tuned.py
@@ -98,6 +124,7 @@ python examples/03_geometries_and_motor_failure.py
 python examples/04_custom_airframe_and_controller.py
 python examples/05_policy_template.py     # plug in your own model
 python examples/06_real_drones.py         # -> docs/real_drones.png
+python examples/07_train_loop.py          # train the learned loop (~5 min) and compare it with the PID
 ```
 
 ```python
