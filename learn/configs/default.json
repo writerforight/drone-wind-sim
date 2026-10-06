@@ -1,0 +1,52 @@
+{
+  "airframe": "quad_x",
+  "control": "motors",
+  "model": {
+    "type": "loop_mlp",
+    "hidden_state": 32,
+    "layers": [128, 128],
+    "activation": "tanh",
+    "memory_activation": "tanh"
+  },
+  "loss": {
+    "error": 1.0,
+    "error_power": 2.0,
+    "error_rate": 0.05,
+    "error_accel": 0.0,
+    "body_rates": 0.01,
+    "action_smooth": 0.0
+  },
+  "target": {
+    "mode": "mixed",
+    "radius_start": 0.5,
+    "radius_end": 4.0,
+    "curriculum_iters": 400,
+    "speed": 1.5,
+    "vertical_scale": 0.4
+  },
+  "world": {
+    "mass_scale": [0.9, 1.2],
+    "temperature_c": [-5.0, 35.0],
+    "site_altitude": [0.0, 1000.0],
+    "wind_speed": [0.0, 6.0],
+    "turbulence_sigma": [0.0, 1.0],
+    "turbulence_tau": 1.0
+  },
+  "sim": {
+    "ctrl_dt": 0.02,
+    "phys_dt": 0.005,
+    "integrator": "euler",
+    "start_tilt": 0.05,
+    "sensor_noise": {"pos": 0.02, "vel": 0.02, "gyro": 0.005}
+  },
+  "train": {
+    "iters": 600,
+    "batch": 128,
+    "episode_s": 8.0,
+    "chunk_s": 1.5,
+    "lr": 0.001,
+    "grad_clip": 1.0,
+    "seed": 0,
+    "log_every": 10
+  }
+}
