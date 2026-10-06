@@ -1,0 +1,7 @@
+{
+  "quad_x": {
+    "file": "quad_x_rates_draft.json",
+    "control": "thrust_rates",
+    "note": "draft: 150 training iterations, 4 s episodes"
+  }
+}

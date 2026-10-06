@@ -109,6 +109,9 @@ def train(cfg, out_dir, device="cpu", quiet=False):
         if radius >= cfg["target"].get("radius_end", radius) and row["loss"] < best:
             best = row["loss"]
             save(model, cfg, os.path.join(out_dir, "model_best.pt"))
+        if it % tc.get("save_every", 25) == 0:          # so a stopped run keeps its latest weights
+            save(model, cfg, os.path.join(out_dir, "model.pt"))
+            write_log(rows, out_dir)
         if not quiet and (it % tc.get("log_every", 10) == 0 or it == tc["iters"] - 1):
             print(f"iter {it:5d}  loss {row['loss']:8.4f}  final error {final_err:6.3f} m  "
                   f"target radius {radius:4.1f} m  |grad| {row['grad_norm']:7.3f}  {row['time_s']:6.0f} s")

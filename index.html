@@ -99,7 +99,7 @@
         <div class="row two"><label>Course</label>
           <select id="course"><option value="rings">Ring course (race)</option><option value="eight">Figure-eight</option><option value="free">Free flight</option></select></div>
         <div class="row two"><label>Controller</label>
-          <div class="seg" id="gainSeg"><button data-v="tuned" class="on" title="Cascaded PID with integral action">Tuned PID</button><button data-v="untuned" title="P only in the outer loops, soft inner loops: drifts in wind">Untuned</button></div></div>
+          <div class="seg" id="gainSeg"><button data-v="tuned" class="on" title="Cascaded PID with integral action">Tuned PID</button><button data-v="untuned" title="P only in the outer loops, soft inner loops: drifts in wind">Untuned</button><button data-v="learned" title="Neural network with memory, trained by backpropagation through the simulator (learn/ in the repo)">Learned NN</button></div></div>
         <div class="note" id="modeNote"></div>
         <div style="display:flex; gap:6px; margin-top:6px"><button id="resetBtn" class="primary" style="flex:1">↺ Restart <kbd>R</kbd></button><button id="pauseBtn" style="flex:1">⏸ Pause <kbd>P</kbd></button></div>
         <div class="note" id="best"></div>
@@ -172,6 +172,7 @@
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="web/sim.js"></script>
+<script src="web/learned.js"></script>
 <script src="web/app.js"></script>
 </body>
 </html>

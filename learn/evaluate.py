@@ -26,12 +26,13 @@ class LearnedController:
         self.reset()
 
     def reset(self):
-        self.h = self.model.initial_memory(1, torch.zeros(1))
-        self.u = torch.zeros(1, self.act.act_dim)
+        self.dtype = next(self.model.parameters()).dtype
+        self.h = self.model.initial_memory(1, torch.zeros(1, dtype=self.dtype))
+        self.u = torch.zeros(1, self.act.act_dim, dtype=self.dtype)
 
     @torch.no_grad()
     def update(self, est, ref, dt):
-        t = lambda a: torch.as_tensor(np.asarray(a, dtype=float), dtype=torch.float32)[None]   # noqa: E731
+        t = lambda a: torch.as_tensor(np.asarray(a, dtype=float), dtype=self.dtype)[None]   # noqa: E731
         s = DiffState(t(est.p), t(est.v), t(est.q), t(est.w), None)
         obs = observation(s, t(ref["p"]), t(ref.get("v", np.zeros(3))), self.u, None, None)
         self.u, self.h = self.model(obs, self.h)

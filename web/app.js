@@ -1,7 +1,7 @@
 /* Drone Wind Sim — browser game on top of web/sim.js (the JS port of the Python simulator). */
 (function () {
   'use strict';
-  const S = window.DroneSim, V = S.vec;
+  const S = window.DroneSim, V = S.vec, NN = window.DroneLearned;
   const $ = (id) => document.getElementById(id);
   const RAD = Math.PI / 180;
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
@@ -16,7 +16,28 @@
     pHold: [0, 0, 3], yawRef: 0, time: 0, raceStart: null, raceEnd: null, ring: 0, crashed: false, crashReason: '',
     history: [], trail: [], nextGust: 6, lastP: null,
   };
-  let sim, ctrl, guide, af, wind, rings = [], eight = null;
+  let sim, ctrl, anglePid, guide, af, wind, rings = [], eight = null;
+  const nets = {};                            // airframe -> trained network (web/models, see learn/export_web.py)
+
+  async function loadNets() {
+    try {
+      const idx = await (await fetch('web/models/index.json')).json();
+      for (const [name, e] of Object.entries(idx)) {
+        const net = new NN.LearnedNet(await (await fetch(`web/models/${e.file}`)).json());
+        const diff = net.selfCheck();
+        if (diff < 1e-5) nets[name] = net; else console.warn(`model ${e.file}: self-check failed (${diff})`);
+      }
+    } catch (err) { console.warn('no trained networks', err); }
+    if (st.gains === 'learned') { ctrl = makeCtrl(); updateInfo(); }
+  }
+  function makeCtrl() {
+    if (st.gains === 'learned' && nets[st.airframe]) return new NN.LearnedController(nets[st.airframe]);
+    return new S.CascadedPID(S.PRESETS[st.airframe](), st.gains === 'learned' ? 'tuned' : st.gains);
+  }
+  function ctrlLabel() {
+    if (st.gains !== 'learned') return `${st.gains} PID`;
+    return nets[st.airframe] ? `learned NN (${nets[st.airframe].m.control})` : 'tuned PID (no network for this airframe)';
+  }
 
   function readEnv() {
     return { speed: +$('windSpeed').value, dir: +$('windDir').value, turb: $('turb').value, gust: +$('gustSpeed').value,
@@ -51,7 +72,8 @@
     sim = new S.Simulation(af, atm, wind, new S.Sensors(env.sensors, (Math.random() * 1e9) | 0));
     const start = [0, 0, 2.5];
     sim.reset(start, 0);
-    ctrl = new S.CascadedPID(S.PRESETS[st.airframe](), st.gains);
+    ctrl = makeCtrl();
+    anglePid = new S.CascadedPID(S.PRESETS[st.airframe](), 'tuned');      // angle mode is always the PID's attitude loop
     rings = makeRings();
     eight = S.figureEight([0, 18, 6], 16, 9);
     guide = st.course === 'eight' ? new S.PathFollower(eight, 4) : st.course === 'rings'
@@ -98,11 +120,11 @@
     } else if (st.mode === 'angle') {
       st.yawRef += s.yaw * 1.6 * dt;
       const tilt = 30 * RAD;
-      n = ctrl.updateAngle(est, s.right * tilt, s.fwd * tilt, st.yawRef, s.up * 2.5, dt);
+      n = (ctrl.updateAngle ? ctrl : anglePid).updateAngle(est, s.right * tilt, s.fwd * tilt, st.yawRef, s.up * 2.5, dt);
       st.pHold = sim.state.p.slice();
     } else {
       // assist: the sticks move a hold point; released, the PID holds it against the wind
-      const vmax = st.airframe === 'crazyflie' ? 3 : 6, c = Math.cos(yawNow), si = Math.sin(yawNow);
+      const vmax = st.airframe === 'crazyflie' ? 3 : ctrl instanceof NN.LearnedController ? 4 : 6, c = Math.cos(yawNow), si = Math.sin(yawNow);
       const vb = [s.fwd * vmax, -s.right * vmax];
       const vcmd = [c * vb[0] - si * vb[1], si * vb[0] + c * vb[1], s.up * 2.5];
       st.yawRef += s.yaw * 1.6 * dt;
@@ -371,7 +393,7 @@
       <div>altitude <b>${s.p[2].toFixed(1)} m</b> · ground speed <b>${gs.toFixed(1)}</b> m/s</div>
       <div>airspeed ${as.toFixed(1)} m/s · tilt <b class="${tilt > 35 ? 'warn' : ''}">${tilt.toFixed(0)}°</b></div>
       <div>air density ${rho.toFixed(3)} kg/m³${sat ? ` · <span class="warn">${sat} motor${sat > 1 ? 's' : ''} at max</span>` : ''}</div>
-      <div style="color:var(--muted)">${st.mode === 'assist' ? 'Assist (GPS hold)' : st.mode === 'angle' ? 'Angle (manual)' : 'Autopilot'} · ${st.gains} PID · cam ${['chase', 'orbit', 'top'][st.camMode]}</div>`;
+      <div style="color:var(--muted)">${st.mode === 'assist' ? 'Assist (GPS hold)' : st.mode === 'angle' ? 'Angle (manual)' : 'Autopilot'} · ${ctrlLabel()}${ctrl.memoryNorm ? ` · memory |h| ${ctrl.memoryNorm().toFixed(2)}` : ''} · cam ${['chase', 'orbit', 'top'][st.camMode]}</div>`;
     // motor bars
     const bars = $('motors').children;
     af.rotors.forEach((r, i) => {
@@ -441,6 +463,12 @@
       angle: 'The keys set the tilt directly. Nothing holds your position: the wind blows you away unless you lean into it.',
       auto: st.course === 'free' ? 'Autopilot needs a course: choose rings or figure-eight.' : 'The PID flies the course by itself. Try the untuned gains, more wind or a failed motor.',
     }[st.mode];
+    if (st.gains === 'learned') {
+      const net = nets[st.airframe];
+      $('modeNote').textContent += net
+        ? ` Learned NN: a recurrent MLP trained by backpropagation through the simulator (learn/). It only sees sensors and its own memory — not the wind, mass or air density.${st.mode === 'angle' ? ' In Angle mode you fly, so the PID attitude loop is used.' : ''}`
+        : ` No network has been trained for this airframe yet; trained: ${Object.keys(nets).join(', ') || 'loading…'}.`;
+    }
     updateBest();
   }
   function updateBest() {
@@ -471,7 +499,15 @@
   }
   function wire() {
     seg('modeSeg', 'mode', () => setMode(st.mode));
-    seg('gainSeg', 'gains', () => { ctrl = new S.CascadedPID(S.PRESETS[st.airframe](), st.gains); updateInfo(); toast(`${st.gains} PID`); });
+    seg('gainSeg', 'gains', () => {
+      const alt = Object.keys(nets)[0];
+      if (st.gains === 'learned' && !nets[st.airframe] && alt) {
+        st.airframe = alt; $('airframe').value = alt; store('dws.airframe', alt); build();
+        toast(`The network is trained for ${af.label}: switched airframe`);
+        return;
+      }
+      ctrl = makeCtrl(); updateInfo(); toast(ctrlLabel());
+    });
     $('course').onchange = (e) => { st.course = e.target.value; store('dws.course', st.course); build(); e.target.blur(); };
     $('airframe').onchange = (e) => { st.airframe = e.target.value; store('dws.airframe', st.airframe); build(); e.target.blur(); };
     $('windSpeed').oninput = (e) => { wind.meanSpeed = +e.target.value; updateInfo(); };
@@ -551,6 +587,7 @@
   for (const [k, id] of [['mode', 'modeSeg'], ['gains', 'gainSeg']]) { const v = load(`dws.${k}`); if (v) { st[k] = v; setSeg(id, v); } }
   wire();
   build();
+  loadNets();
   requestAnimationFrame(frame);
   window.__dws = { st, get sim() { return sim; }, get ctrl() { return ctrl; }, build, keys, setMode };
 })();
