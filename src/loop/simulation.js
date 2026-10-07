@@ -13,6 +13,8 @@ import { createMixer } from '../motor/mixer.js';
 import { createMotors, rotorWrench, stepMotors } from '../motor/motors.js';
 import { createState, step } from '../physics/rigidbody.js';
 import { toEuler } from '../physics/math3.js';
+import { SENSOR_LEVELS } from '../config.js';
+import { createSensors } from '../sensors/sensors.js';
 
 /**
  * The floor at z = 0: an inelastic contact. Below the floor the drone is put back on it, its downward
@@ -27,7 +29,14 @@ export function groundContact(s) {
 /** Ideal measurement: the true state (sensors/ replaces this with noise, bias and delay). */
 export const perfectSensor = (state) => ({ p: state.p.slice(), v: state.v.slice(), q: state.q.slice(), w: state.w.slice() });
 
-export function createSimulation(cfg, { controller, measure = perfectSensor, initial = {} } = {}) {
+/** The measurement function for a config: the true state for 'ideal', otherwise noisy / delayed sensors. */
+export function sensorsFor(cfg) {
+  const S = cfg.sensors || { level: 'ideal' };
+  if (!S.level || S.level === 'ideal') return perfectSensor;
+  return createSensors(SENSOR_LEVELS[S.level], cfg.physics, S.seed || 1);
+}
+
+export function createSimulation(cfg, { controller, measure = sensorsFor(cfg), initial = {} } = {}) {
   const P = cfg.physics, M = cfg.motor, C = cfg.controller;
   const mixer = createMixer(M);
   const hoverOmega = Math.sqrt((P.mass * P.gravity) / (M.rotors.length * M.kThrust));
@@ -37,18 +46,20 @@ export function createSimulation(cfg, { controller, measure = perfectSensor, ini
     reference: { position: (initial.position || [0, 0, 0]).slice(), yaw: 0 },
     disturbance: { extForce: [0, 0, 0], wind: [0, 0, 0] },
     command: mixer.mix({ thrust: P.mass * P.gravity, torque: [0, 0, 0] }),
-    last: null, steps: 0,
+    last: null, steps: 0, acc: [0, 0, 0],
 
     /** One controller period: measure, control, mix, then `ratio` physics + motor steps. */
     tick() {
-      const meas = measure(sim.state, sim.t);
+      const meas = measure(sim.state, sim.t, { acc: sim.acc });
       const u = controller.control(meas, sim.reference, C);
       sim.command = mixer.mix(u);
       for (let i = 0; i < ratio; i++) {
         sim.motors = stepMotors(sim.motors, sim.command.omegaCmd, M, P.dt);
         const w = rotorWrench(sim.motors.omega, M);
+        const v0 = sim.state.v;
         sim.state = step(sim.state, { ...w, ...sim.disturbance }, P);
         if (P.ground) sim.state = groundContact(sim.state);
+        sim.acc = sim.state.v.map((x, k) => (x - v0[k]) / P.dt);   // true acceleration, for the accelerometer
         sim.t += P.dt;
       }
       sim.last = { t: sim.t, u, meas };

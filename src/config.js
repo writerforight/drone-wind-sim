@@ -56,6 +56,16 @@ export const quadX450 = {
     rate: { kp: [18, 18, 8], ki: [4, 4, 2], kd: [0.25, 0.25, 0], iLimit: 3.0 },                // → J · (…)
     maxRate: [4, 4, 2],                      // rad/s, limit on the rate references
   },
+  // What the controller sees (sensors/). Standard deviations of white noise, constant biases, one common
+  // delay. 'level' picks one of SENSOR_LEVELS below; 'ideal' is the true state.
+  sensors: { level: 'ideal', seed: 1 },
+};
+
+/** Sensor quality levels, from perfect to poor (orders of magnitude of a hobby IMU + a position system). */
+export const SENSOR_LEVELS = {
+  ideal: { delay: 0, gyroNoise: 0, gyroBias: 0, accelNoise: 0, attitudeNoise: 0, positionNoise: 0, velocityNoise: 0, positionRate: 500 },
+  realistic: { delay: 0.01, gyroNoise: 0.01, gyroBias: 0.005, accelNoise: 0.1, attitudeNoise: 0.005, positionNoise: 0.01, velocityNoise: 0.03, positionRate: 50 },
+  poor: { delay: 0.04, gyroNoise: 0.03, gyroBias: 0.02, accelNoise: 0.3, attitudeNoise: 0.02, positionNoise: 0.05, velocityNoise: 0.1, positionRate: 20 },
 };
 
 
