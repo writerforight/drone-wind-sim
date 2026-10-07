@@ -25,3 +25,4 @@ Log kept by the work loop (see SPEC.md). Newest entry at the bottom of "Log".
 ## Log
 
 - 2026-10-07 — Project created: SPEC.md, PROGRESS.md, LICENSE (MIT). No code yet. Tests: none yet.
+- 2026-10-07 — **M1 · unit 1/4: physics core.** `src/config.js` (single config: Quad X 450 preset, SI units, frames documented), `src/physics/math3.js` (vector / quaternion helpers), `src/physics/rigidbody.js` (Newton–Euler 6-DoF: p, v, q, body rates; gravity, linear drag on air-relative velocity, wind and external force inputs; fixed-step RK4 with zero-order-hold input, quaternion renormalised). Tests: `node tests/run.mjs` → 5/5 pass (quaternion round trips, free fall exact, hover at thrust = weight, energy + angular momentum conserved without drag/motors with relative drift < 1e-8 over 10 s, terminal speed m g / c_d). Open problems: none. Next: motor model + mixer.
