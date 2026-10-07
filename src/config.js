@@ -39,6 +39,22 @@ export const quadX450 = {
       { name: 'back-right', angleDeg: -135, spin: -1 },
     ],
   },
+  // Cascaded PID: position → attitude → body rate. Gains are per axis [x, y, z] (or [roll, pitch, yaw]).
+  // The rate loop's output is multiplied by the inertia J, so its gains are in rad/s² per unit error and do
+  // not change when the airframe gets heavier or lighter.
+  controller: {
+    dt: 0.004,                               // s, controller period (250 Hz); physics runs 2 steps per call
+    // Each axis is a double integrator under PID: s³ + Kd s² + Kp s + Ki = 0. Ki is placed so the slowest
+    // (integral) pole is not sluggish: x, y poles −1.15, −0.43 ± 0.58j (τ_slow 2.4 s, ζ 0.59);
+    // z poles −0.58, −1.21 ± 1.07j (τ_slow 1.7 s, ζ 0.75). With Ki 0.2 / 0.6 the integral settled in ~6 s.
+    // Anti-windup: an axis's error is integrated only while |e| < iZone (conditional integration), so a large
+    // initial error cannot wind the integral up; iLimit additionally caps it.
+    position: { kp: [1.5, 1.5, 4.0], ki: [0.6, 0.6, 1.5], kd: [2.0, 2.0, 3.0], iLimit: 2.0, iZone: 0.3 },   // → acceleration, m/s²
+    maxTilt: 30,                             // deg, the position loop never asks for more tilt than this
+    attitude: { kp: [7.0, 7.0, 3.0] },       // angle error (rad) → rate reference (rad/s)
+    rate: { kp: [18, 18, 8], ki: [4, 4, 2], kd: [0.25, 0.25, 0], iLimit: 3.0 },                // → J · (…)
+    maxRate: [4, 4, 2],                      // rad/s, limit on the rate references
+  },
 };
 
 export const config = quadX450;
