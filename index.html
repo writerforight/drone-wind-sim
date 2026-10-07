@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quadrotor Lab</title>
+<meta name="description" content="A browser quadrotor simulator for controller design and tuning: 6-DoF physics, motor model, cascaded PID, live gains and step responses.">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body data-mode="">
+<header>
+  <b class="brand">Quadrotor Lab</b>
+  <span id="modeName" class="muted"></span>
+  <span class="spacer"></span>
+  <button id="camBtn" title="Chase / orbit camera (C)">Camera</button>
+  <button id="plotsBtn" title="Show / hide the plots">Plots</button>
+  <button id="resetBtn" title="Restart the mode (R)">Restart</button>
+  <button id="menuBtn" class="primary" title="Menu (Esc)">Menu</button>
+</header>
+
+<main>
+  <div id="stage"></div>
+  <div id="hud"></div>
+  <div id="sticks"></div>
+
+  <aside id="labPanel" class="hidden">
+    <div class="panel-title">Step test</div>
+    <div class="btns"><button id="stepZ" class="primary">Step z ±1 m</button><button id="stepX">Step x ±1 m</button></div>
+    <div id="analytic" class="muted small"></div>
+    <div id="stepResult" class="small"></div>
+    <div class="panel-title">Gains <span class="muted">(live)</span></div>
+    <div id="gainsBox"></div>
+  </aside>
+
+  <section id="plots">
+    <canvas id="plotError"></canvas><canvas id="plotAttitude"></canvas><canvas id="plotMotors"></canvas>
+  </section>
+</main>
+
+<div id="menu">
+  <div class="menu-inner">
+    <h1>Quadrotor Lab</h1>
+    <p class="muted">6-DoF rigid-body physics (RK4), a motor model, a mixer and a cascaded PID — fly it, or tune it and read the step response.</p>
+    <h2>Mode</h2>
+    <div id="modeCards" class="cards"></div>
+    <h2>Drone</h2>
+    <label class="row">Preset <select id="presetSel"></select></label>
+    <div id="designBox"></div>
+    <button id="flyBtn" class="primary big">Start</button>
+    <p class="muted small">Keyboard: W/S pitch · A/D roll · ↑/↓ throttle · ←/→ yaw · Shift finer · R restart · C camera · Esc menu.
+      Gamepad: left stick throttle / yaw, right stick pitch / roll. Touch: the two on-screen sticks.</p>
+  </div>
+</div>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
