@@ -30,6 +30,14 @@ export const quadX450 = {
     tau: 0.03,                               // s, first-order lag of the rotor speed
     omegaMin: 0,                             // rad/s
     omegaMax: 1100,                          // rad/s  (≈ 10 500 rpm)
+    // X layout seen from above, body x forward / y left. spin +1 = rotor turns counter-clockwise seen from
+    // above (its reaction torque on the body is −z), −1 = clockwise. Diagonal rotors share a direction.
+    rotors: [
+      { name: 'front-right', angleDeg: -45, spin: +1 },
+      { name: 'back-left', angleDeg: 135, spin: +1 },
+      { name: 'front-left', angleDeg: 45, spin: -1 },
+      { name: 'back-right', angleDeg: -135, spin: -1 },
+    ],
   },
 };
 
