@@ -1,4 +1,4 @@
-import { quadX450 } from '../src/config.js';
+import { presets, quadX450 } from '../src/config.js';
 import { createCascadedPID } from '../src/controller/cascaded-pid.js';
 import { runScenario } from '../src/loop/simulation.js';
 import { fromEuler } from '../src/physics/math3.js';
@@ -20,6 +20,25 @@ function secondOrderStep(t, wn, zeta) {
 }
 
 export const tests = {
+  'every preset recovers to hover (offset 0.5 m, 10° tilt)'() {
+    for (const cfg of presets) {
+      const { log } = runScenario(cfg, pid(cfg), {
+        seconds: 12, initial: { position: [0.5, -0.3, 1.6], attitude: fromEuler(10 * deg, -8 * deg, 0.4) },
+        refAt: () => ({ position: [0, 0, 2], yaw: 0 }),
+      });
+      const end = log[log.length - 1], err = Math.hypot(end.p[0], end.p[1], end.p[2] - 2);
+      ok(err < 0.02 && Math.abs(end.euler[0]) < deg, `${cfg.name}: error ${err.toFixed(3)} m, roll ${(end.euler[0] / deg).toFixed(2)}°`);
+    }
+  },
+
+  'the floor holds a drone with idle motors, and full throttle lifts it off'() {
+    const cfg = quadX450, ctl = pid(cfg), W = cfg.physics.mass * cfg.physics.gravity;
+    const idle = runScenario(cfg, ctl, { seconds: 2, initial: { position: [0, 0, 0] }, refAt: () => ({ attitude: [0, 0], yawRate: 0, thrust: 0.2 * W }) });
+    ok(Math.abs(idle.log.at(-1).p[2]) < 1e-9, `fell through: z = ${idle.log.at(-1).p[2]}`);
+    const up = runScenario(cfg, pid(cfg), { seconds: 1, initial: { position: [0, 0, 0] }, refAt: () => ({ attitude: [0, 0], yawRate: 0, thrust: 1.5 * W }) });
+    ok(up.log.at(-1).p[2] > 1, `did not take off: z = ${up.log.at(-1).p[2]}`);
+  },
+
   'hover is stable: from a 0.5 m offset and 10° tilt back to the setpoint'() {
     const cfg = quadX450;
     const { log } = runScenario(cfg, pid(cfg), {

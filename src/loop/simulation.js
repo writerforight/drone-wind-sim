@@ -14,6 +14,16 @@ import { createMotors, rotorWrench, stepMotors } from '../motor/motors.js';
 import { createState, step } from '../physics/rigidbody.js';
 import { toEuler } from '../physics/math3.js';
 
+/**
+ * The floor at z = 0: an inelastic contact. Below the floor the drone is put back on it, its downward
+ * speed and its spin are removed and the horizontal speed is damped (friction). Kept deliberately simple:
+ * it exists for take-off and landing, not to study impacts.
+ */
+export function groundContact(s) {
+  if (s.p[2] >= 0) return s;
+  return { p: [s.p[0], s.p[1], 0], v: [s.v[0] * 0.8, s.v[1] * 0.8, Math.max(0, s.v[2])], q: s.q, w: s.w.map((x) => x * 0.5) };
+}
+
 /** Ideal measurement: the true state (sensors/ replaces this with noise, bias and delay). */
 export const perfectSensor = (state) => ({ p: state.p.slice(), v: state.v.slice(), q: state.q.slice(), w: state.w.slice() });
 
@@ -38,6 +48,7 @@ export function createSimulation(cfg, { controller, measure = perfectSensor, ini
         sim.motors = stepMotors(sim.motors, sim.command.omegaCmd, M, P.dt);
         const w = rotorWrench(sim.motors.omega, M);
         sim.state = step(sim.state, { ...w, ...sim.disturbance }, P);
+        if (P.ground) sim.state = groundContact(sim.state);
         sim.t += P.dt;
       }
       sim.last = { t: sim.t, u, meas };

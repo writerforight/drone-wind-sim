@@ -22,6 +22,7 @@ export const quadX450 = {
     gravity: GRAVITY,                        // m/s²
     linearDrag: 0.25,                        // N per (m/s) of air-relative speed, lumped body drag
     dt: 0.002,                               // s, fixed physics step (500 Hz), RK4
+    ground: true,                            // a flat floor at z = 0 (needed for take-off and landing)
   },
   motor: {
     arm: 0.225,                              // m, centre to motor
@@ -57,4 +58,26 @@ export const quadX450 = {
   },
 };
 
+
+/** A light 5-inch racer: small inertia, fast motors, high thrust-to-weight. */
+export const racer5 = {
+  name: 'Racer 5"',
+  physics: { ...quadX450.physics, mass: 0.65, inertia: [0.0021, 0.0021, 0.0036], linearDrag: 0.15 },
+  motor: { ...quadX450.motor, arm: 0.11, kThrust: 9.4e-7, kTorque: 1.4e-8, tau: 0.015, omegaMax: 2800 },
+  controller: quadX450.controller,
+};
+
+/** A heavy-lift frame: large props, slow motors (bigger lag), low thrust-to-weight. */
+export const heavy = {
+  name: 'Heavy lift',
+  physics: { ...quadX450.physics, mass: 3.0, inertia: [0.08, 0.08, 0.14], linearDrag: 0.5 },
+  motor: { ...quadX450.motor, arm: 0.35, kThrust: 2.9e-5, kTorque: 6.0e-7, tau: 0.06, omegaMax: 800 },
+  // slower motors: a lower rate-loop bandwidth keeps a phase margin against the 60 ms lag
+  controller: { ...quadX450.controller, rate: { ...quadX450.controller.rate, kp: [10, 10, 6], kd: [0.1, 0.1, 0] }, attitude: { kp: [5, 5, 2.5] } },
+};
+
+export const presets = [quadX450, racer5, heavy];
 export const config = quadX450;
+
+/** A deep copy, so a user's edits (design panel, gain sliders) never change the presets themselves. */
+export const cloneConfig = (c) => JSON.parse(JSON.stringify(c));
