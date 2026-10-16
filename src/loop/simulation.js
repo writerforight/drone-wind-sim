@@ -8,6 +8,9 @@
  * Physics always runs at its fixed step (config.physics.dt). The controller runs every
  * round(controller.dt / physics.dt) physics steps and its output is held in between (zero-order hold).
  * A renderer or a UI only reads `sim.state` and calls `sim.advance(seconds)`; it never changes the step.
+ *
+ * A controller returns either a wrench { thrust, torque } (→ mixer) or rotor speed commands { omegaCmd }
+ * (→ motors directly, clipped to [ω_min, ω_max]).
  */
 import { createMixer } from '../motor/mixer.js';
 import { createMotors, rotorWrench, stepMotors } from '../motor/motors.js';
@@ -32,18 +35,27 @@ export function createSimulation(cfg, { controller, measure = perfectSensor, ini
   const mixer = createMixer(M);
   const hoverOmega = Math.sqrt((P.mass * P.gravity) / (M.rotors.length * M.kThrust));
   const ratio = Math.max(1, Math.round(C.dt / P.dt));
+  // A controller may skip the mixer and command the rotor speeds itself (a policy acting on the motors).
+  const motorCommand = (omegaCmd) => {
+    const cmd = omegaCmd.map((w) => Math.min(M.omegaMax, Math.max(M.omegaMin, w)));
+    return { omegaCmd: cmd, thrusts: cmd.map((w) => M.kThrust * w * w), saturated: cmd.some((w, i) => w !== omegaCmd[i]) };
+  };
   const sim = {
     t: 0, state: createState(initial), motors: createMotors(M, hoverOmega),
     reference: { position: (initial.position || [0, 0, 0]).slice(), yaw: 0 },
     disturbance: { extForce: [0, 0, 0], wind: [0, 0, 0] },
     command: mixer.mix({ thrust: P.mass * P.gravity, torque: [0, 0, 0] }),
-    last: null, steps: 0,
+    last: null, steps: 0, controller,
+    physics: P,                // the simulated drone's physical parameters (a mode may change them live)
+
+    /** Hand the drone to another controller mid-flight (it starts from a reset state). */
+    setController(c) { c.reset(); sim.controller = c; },
 
     /** One controller period: measure, control, mix, then `ratio` physics + motor steps. */
     tick() {
       const meas = measure(sim.state, sim.t);
-      const u = controller.control(meas, sim.reference, C);
-      sim.command = mixer.mix(u);
+      const u = sim.controller.control(meas, sim.reference, C);
+      sim.command = u.omegaCmd ? motorCommand(u.omegaCmd) : mixer.mix(u);
       for (let i = 0; i < ratio; i++) {
         sim.motors = stepMotors(sim.motors, sim.command.omegaCmd, M, P.dt);
         const w = rotorWrench(sim.motors.omega, M);

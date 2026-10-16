@@ -26,14 +26,40 @@ import { dot, rotate, toEuler } from '../physics/math3.js';
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
+/**
+ * The inner loop on its own: body-rate reference → body torque, τ = J ⊙ (Kp e_w + Ki ∫e_w + Kd ė_w).
+ * Used by the cascaded PID below and by a learned policy that commands body rates (ml/actions.js).
+ */
+export function createRateLoop(airframe) {
+  let iRate, prevErr;
+  const loop = {
+    reset() { iRate = [0, 0, 0]; prevErr = null; },
+    /** wRef, w: [3] rad/s;  P: config.controller (rate gains, dt) → torque [3] N·m */
+    torque(wRef, w, P) {
+      const dt = P.dt, J = airframe.inertia, R = P.rate, torque = [0, 0, 0], e = [0, 0, 0];
+      for (let k = 0; k < 3; k++) {
+        e[k] = wRef[k] - w[k];
+        iRate[k] = clamp(iRate[k] + e[k] * dt, -R.iLimit, R.iLimit);
+        const de = prevErr ? (e[k] - prevErr[k]) / dt : 0;
+        torque[k] = J[k] * (R.kp[k] * e[k] + R.ki[k] * iRate[k] + R.kd[k] * de);
+      }
+      prevErr = e;
+      return torque;
+    },
+  };
+  loop.reset();
+  return loop;
+}
+
 export function createCascadedPID(airframe) {
-  let iPos, iRate, prevRateErr;
+  let iPos;
+  const rateLoop = createRateLoop(airframe);
   const ctl = {
     name: 'cascaded PID',
-    reset() { iPos = [0, 0, 0]; iRate = [0, 0, 0]; prevRateErr = null; },
+    reset() { iPos = [0, 0, 0]; rateLoop.reset(); },
 
     control(meas, ref, P) {
-      const dt = P.dt, m = airframe.mass, g = airframe.gravity, J = airframe.inertia;
+      const dt = P.dt, m = airframe.mass, g = airframe.gravity;
       const [roll, pitch, yaw] = toEuler(meas.q);
       let rollD, pitchD, yawRateRef, thrust;
 
@@ -65,14 +91,7 @@ export function createCascadedPID(airframe) {
         clamp(att[1] * (pitchD - pitch), -mr[1], mr[1]),
         clamp(yawRateRef, -mr[2], mr[2]),
       ];
-      const R = P.rate, torque = [0, 0, 0], e = [0, 0, 0];
-      for (let k = 0; k < 3; k++) {
-        e[k] = wRef[k] - meas.w[k];
-        iRate[k] = clamp(iRate[k] + e[k] * dt, -R.iLimit, R.iLimit);
-        const de = prevRateErr ? (e[k] - prevRateErr[k]) / dt : 0;
-        torque[k] = J[k] * (R.kp[k] * e[k] + R.ki[k] * iRate[k] + R.kd[k] * de);
-      }
-      prevRateErr = e;
+      const torque = rateLoop.torque(wRef, meas.w, P);
       return { thrust, torque, debug: { rollD, pitchD, wRef } };
     },
   };
