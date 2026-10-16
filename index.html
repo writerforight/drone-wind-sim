@@ -17,6 +17,7 @@
   <span class="spacer"></span>
   <button id="camBtn" title="Chase / orbit camera (C)">Camera</button>
   <button id="plotsBtn" title="Show / hide the plots">Plots</button>
+  <button id="recBtn" title="Record the policy inputs and actions (JSON download when stopped)">●<span class="lbl"> Rec</span></button>
   <button id="resetBtn" title="Restart the mode (R)">Restart</button>
   <button id="menuBtn" class="primary" title="Menu (Esc)">Menu</button>
 </header>
@@ -26,13 +27,33 @@
   <div id="hud"></div>
   <div id="sticks"></div>
 
-  <aside id="labPanel" class="hidden">
+  <aside id="labPanel" class="side hidden">
     <div class="panel-title">Step test</div>
     <div class="btns"><button id="stepZ" class="primary">Step z ±1 m</button><button id="stepX">Step x ±1 m</button></div>
     <div id="analytic" class="muted small"></div>
     <div id="stepResult" class="small"></div>
     <div class="panel-title">Gains <span class="muted">(live)</span></div>
     <div id="gainsBox"></div>
+  </aside>
+
+  <aside id="targetPanel" class="side hidden">
+    <div class="panel-title">Who flies</div>
+    <div class="row"><select id="ctlSel"></select></div>
+    <label class="file">Load a policy (.json) <input id="policyFile" type="file" accept=".json,application/json"></label>
+    <div id="ctlInfo" class="muted small"></div>
+    <div class="panel-title">Target <span class="muted">(or double-click the floor)</span></div>
+    <div class="xyz">
+      <label>x <input id="tx" type="number" step="0.5" value="0"></label>
+      <label>y <input id="ty" type="number" step="0.5" value="0"></label>
+      <label>z <input id="tz" type="number" step="0.5" min="0.2" value="1.5"></label>
+    </div>
+    <div class="btns"><button id="goBtn" class="primary">Go</button><button id="randBtn">Random</button></div>
+    <div class="panel-title">Unknown to the controller</div>
+    <label class="slider"><span>Payload</span><input id="payload" type="range" min="0" max="0.8" step="0.02" value="0"><output id="payloadOut"></output></label>
+    <label class="slider"><span>Wind x</span><input id="wind" type="range" min="0" max="6" step="0.1" value="0"><output id="windOut"></output></label>
+    <div class="panel-title">What a sequence policy sees <span class="muted">(last 0.32 s →)</span></div>
+    <canvas id="seqCanvas"></canvas>
+    <div class="muted small">rows: target error e, velocity v, attitude R, body rates w, previous action a, height z — blue −, red +</div>
   </aside>
 
   <section id="plots">

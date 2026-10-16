@@ -146,6 +146,18 @@ export function createView(container, cfg) {
     camera: cam,
     rebuild(newCfg) { scene.remove(drone); drone = buildDrone(newCfg); scene.add(drone); },
     clearTrail() { trailLen = 0; },
+    canvas: el,
+
+    /** The floor point (world x, y) under a screen position, or null if the ray misses the floor. */
+    pickFloor(clientX, clientY) {
+      const r = el.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, camera);
+      const hit = new THREE.Vector3();
+      if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit)) return null;
+      return [hit.x, -hit.z];                                   // Three (x, y, z) → simulation (x, −z)
+    },
 
     update(sim, { reference, showTrail = true } = {}) {
       const s = sim.state, pos = toThree(s.p);

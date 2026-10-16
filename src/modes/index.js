@@ -8,6 +8,7 @@
  * A new mode (race, waypoints, a learned policy) is a new file plus one line in this list.
  */
 import { freeFlight } from './free-flight.js';
+import { targetMode } from './target.js';
 import { tuningLab } from './tuning-lab.js';
 
-export const modes = [freeFlight, tuningLab];
+export const modes = [freeFlight, tuningLab, targetMode];

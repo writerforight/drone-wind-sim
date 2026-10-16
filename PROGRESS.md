@@ -15,12 +15,17 @@ Log kept by the work loop (see SPEC.md). Newest entry at the bottom of "Log".
 - [x] M2 — menu + manual flight with keyboard / gamepad / touch (gamepad and touch not tested on real hardware)
 - [x] M3 — live gain tuning UI
 - [ ] M4 — sensors, delay, wind + robustness demo
-- [ ] M5 — ml/ interface + data recording
+- [x] M5 — ml/ interface + data recording (extended by the owner, see SPEC "Owner's extension": training bridge, sequence policies, Target mode)
 - [ ] M6 — docs for the interview deliverables, extra modes and graphics
 
 ## Open problems
 
-(none — the M1 unit 3 hover-recovery issue is resolved, see the log)
+- **PID does not reject a payload above ≈ 0.17 kg (Quad X 450)** — found while testing the Target mode. With
+  the conditional integration chosen in M1 (integrate only while |e| < iZone = 0.3 m), the steady sag of the
+  P + D part, Δm g / ((m + Δm) Kp_z), exceeds iZone above Δm ≈ 0.17 kg, so the integral never engages:
+  +0.2 kg → 35.0 cm (predicted 35.0), +0.3 kg → 57.8 cm, both still there after 20 s; +0.17 kg → 0.0 cm.
+  Not changed (it is the owner's M1 choice). Options: a larger iZone for z only, back-calculation
+  anti-windup, or integrate always with a clamp. It is also a good baseline for the adaptive controllers.
 
 ## Log
 
@@ -38,3 +43,12 @@ Log kept by the work loop (see SPEC.md). Newest entry at the bottom of "Log".
   - `src/app.js`, `index.html`, `style.css`: rendering decoupled from the fixed-step simulation (accumulator), responsive layout, touch-sized controls.
   Tests: 19/19 in Node (incl. step metrics against first- and second-order formulas); browser smoke check (headless Firefox, 1400 and 500 px): menu, lab step (z +1 m: rise 1.18 s, overshoot 4.4 %, settling 4.17 s, steady error 0.1 cm), design edit, free-flight climb and forward flight, no JavaScript errors.
   Not verified: a real gamepad and a real touch screen (no hardware here).
+- 2026-10-16 — **Owner's extension of M5: an environment for learned sequence controllers** (by the owner's request, outside the one-unit loop).
+  - `src/ml/`: `features.js` (20-number token: target − position, velocity, 2 columns of R, body rates, previous action, height; history window), `actions.js` (levels wrench / rates / motors, a = 0 = hover; `fromExpert` maps the PID's output to an action), `agent.js` (the one object shared by training and deployment: observe, act, command, reward, crash), `env.js` (Gym-style reset / step, random / fixed / function / hand-set targets, domain randomisation with `info.params`, PID expert labels, seeded), `nn.js` (LSTM / GRU / dense forward pass by hand, PyTorch layouts), `policy-controller.js` (a policy behind the controller interface, `adapt(transition)` hook), `recorder.js`.
+  - `src/controller/cascaded-pid.js`: the rate loop extracted as `createRateLoop` (same math, reused by the `rates` level). `src/loop/simulation.js`: controllers may return `{ omegaCmd }` (motor level), `sim.setController()`, `sim.physics`.
+  - `config.ml`: policy period 8 ms (must be a whole number of controller periods — 10 ms silently became 12 ms before the check), history 40, action scales, reward weights, episode and randomisation ranges.
+  - `train/`: `env_server.mjs` (JSON lines, batched, auto-reset), `quadlab.py` (numpy client, `export_policy`, torch exporters, numpy RNN reference), `fit_linear_bc.py` (linear DAgger from the PID → `policies/linear-bc.json`), `train_lstm.py` (torch; **not run here**, PyTorch could not be installed), `test_quadlab.py`, `make_rnn_fixture.py`.
+  - Target mode (`src/modes/target.js`, panel, `ui/sequence.js` heat map of the policy input), header Rec button (JSON download), floor picking in the 3D view.
+  Tests: `node tests/run.mjs` 35/35 (16 new: features, history, action levels and their inverse, policyDt check, env seeds / sizes / expert flight / randomisation ranges / hand-set target, **browser forward pass = numpy reference within 1e-12**, **env and browser controller give bit-identical trajectories**, linear policy reaches typed targets within 5 cm, adapt hook, motor commands, recorder); `python3 train/test_quadlab.py` 4/4. Browser check (headless Chromium, 1400 and 420 px): Target mode with the PID and the linear policy, switching mid-flight, payload and wind, recording (≈ 1000 rows / 8 s), double-click target, lab step unchanged (rise 1.18 s, overshoot 4.4 %, settling 4.17 s), no JavaScript errors, no horizontal scroll.
+  Measured: env step 17 µs in Node; bridge ≈ 19 000 env-steps/s with 64 envs. Linear DAgger policy: 0 crashes in 16 randomised episodes; hover error after 15 s — nominal 1.4 cm, +0.3 kg 59 cm, wind 2 m/s 34 cm (PID: 0.0, 58, 0.2 cm).
+  Open problems: the PID payload finding above.

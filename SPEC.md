@@ -70,3 +70,23 @@ keyboard/gamepad/touch. M3 live gain tuning UI. M4 sensors, delay, wind +
 robustness demo. M5 ml/ interface + data recording. M6 docs for the
 interview deliverables, extra modes and graphics.
 Explain design choices briefly; do not add features beyond this list.
+
+## Owner's extension (2026-10-16): learned sequence controllers
+
+Goal: an environment in which controllers can be trained and compared, first of all a model-free
+controller that decides the torques itself. The owner's model: give the drone a target point (typed as
+coordinates or chosen by hand), feed the controller (an LSTM or any sequence model) the past points and
+past targets as a sequence, and let it decide every next step — adapting to the drone it flies.
+
+This supersedes "no training code required yet" in ml/ above. Constraints that stay: the browser side keeps
+no ML library (the forward pass is written by hand), the physics exists once (in JavaScript; Python training
+drives it through a bridge, it does not copy it), every claim comes with a test or a measured number.
+
+- ml/: one agent module shared by training and deployment (observation token, history window, action
+  levels wrench / rates / motors, reward, crash test); a Gym-style env with random / fixed / function /
+  hand-set targets, domain randomisation with privileged info, a PID expert for imitation labels; a policy
+  controller with an online adaptation hook; a recorder (JSON / CSV); LSTM / GRU / dense forward pass.
+- train/: a Node env server and a numpy Python client; a policy file format the browser loads; a linear
+  DAgger baseline (numpy) and an LSTM DAgger script (torch).
+- modes/: a Target mode — type / double-click / random target, choose the controller (PID or a loaded
+  policy), add payload and wind the controller does not know about, see the policy's input window.
