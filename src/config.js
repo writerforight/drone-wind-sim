@@ -13,6 +13,47 @@
 
 export const GRAVITY = 9.81;
 
+/**
+ * Learning-based control (ml/): what a policy sees, what it commands, how it is scored, and how the training
+ * drones differ from the nominal one. The same numbers are used by the training environment (ml/env.js) and
+ * by a policy flying in the browser (ml/policy-controller.js), so a trained policy meets the inputs it was
+ * trained on. A trained policy file stores the ml settings it was trained with.
+ */
+export const mlDefaults = {
+  policyDt: 0.008,                           // s, the policy acts every 8 ms (125 Hz, a whole number of controller
+                                             //    periods); the action is held in between
+  history: 40,                               // steps of history in the observation window (0.32 s at 125 Hz)
+  // What the policy's four numbers a ∈ [−1, 1]⁴ mean:
+  //   'wrench'  a0 → thrust m g (1 + a0),  a1..3 → body torque J ⊙ angAccel ⊙ a   (through the mixer)
+  //   'rates'   a0 → thrust as above,       a1..3 → body-rate reference maxRate ⊙ a  (through the rate PID)
+  //   'motors'  a_i → rotor thrust T_max (a_i + 1) / 2                              (no mixer at all)
+  action: { level: 'wrench', angAccel: [60, 60, 15] },   // rad/s², the torque at |a| = 1 per unit inertia
+  obsScale: { error: 2, velocity: 3, rates: 6 },          // m, m/s, rad/s: features are divided by these, clipped to ±5
+  reward: {
+    alive: 1.0,                              // per step, for staying in the air
+    position: 1.0,                           // per m of distance to the target
+    velocity: 0.05,                          // per m/s of speed
+    rates: 0.05,                             // per rad/s of body rate
+    action: 0.02,                            // per |a|²
+    smooth: 0.1,                             // per |a − a_prev|²  (against chattering torques)
+    crash: 50,                               // once, when the episode ends in a crash
+  },
+  episode: {
+    seconds: 10,
+    targetBox: [[-3, 3], [-3, 3], [0.5, 4]], // m, random targets and start points are drawn in this box
+    targetEvery: [2, 5],                     // s, a new random target after a time drawn from this range
+    startTilt: 20,                           // deg, largest initial roll / pitch
+    startYaw: 180,                           // deg, largest initial heading (180 = any heading)
+    startSpeed: 1,                           // m/s, largest initial speed per axis
+    maxTilt: 85,                             // deg, crash when the drone tilts beyond this
+    maxDistance: 8,                          // m, crash when this far from the target
+  },
+  // Domain randomisation, drawn once per episode: a factor in [1 − r, 1 + r] for the physical parameters,
+  // a constant wind of up to `wind` m/s. A sequence model that sees its own past actions and their effect can
+  // infer these online (in-context adaptation); info.params exposes the true values for privileged training.
+  randomize: { mass: 0.2, inertia: 0.2, kThrust: 0.1, tau: 0.3, linearDrag: 0.5, wind: 2 },
+};
+
 /** A ~450 mm class quadrotor in X configuration (numbers of the right order, not a specific product). */
 export const quadX450 = {
   name: 'Quad X 450',
@@ -56,6 +97,7 @@ export const quadX450 = {
     rate: { kp: [18, 18, 8], ki: [4, 4, 2], kd: [0.25, 0.25, 0], iLimit: 3.0 },                // → J · (…)
     maxRate: [4, 4, 2],                      // rad/s, limit on the rate references
   },
+  ml: mlDefaults,
 };
 
 
@@ -65,6 +107,7 @@ export const racer5 = {
   physics: { ...quadX450.physics, mass: 0.65, inertia: [0.0021, 0.0021, 0.0036], linearDrag: 0.15 },
   motor: { ...quadX450.motor, arm: 0.11, kThrust: 9.4e-7, kTorque: 1.4e-8, tau: 0.015, omegaMax: 2800 },
   controller: quadX450.controller,
+  ml: mlDefaults,
 };
 
 /** A heavy-lift frame: large props, slow motors (bigger lag), low thrust-to-weight. */
@@ -74,6 +117,7 @@ export const heavy = {
   motor: { ...quadX450.motor, arm: 0.35, kThrust: 2.9e-5, kTorque: 6.0e-7, tau: 0.06, omegaMax: 800 },
   // slower motors: a lower rate-loop bandwidth keeps a phase margin against the 60 ms lag
   controller: { ...quadX450.controller, rate: { ...quadX450.controller.rate, kp: [10, 10, 6], kd: [0.1, 0.1, 0] }, attitude: { kp: [5, 5, 2.5] } },
+  ml: mlDefaults,
 };
 
 export const presets = [quadX450, racer5, heavy];
