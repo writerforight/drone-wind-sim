@@ -3,6 +3,7 @@
  *
  *   const view = createView(container, cfg);
  *   view.update(sim, { reference, trail: true });   // once per animation frame
+ *   view.update(sim, { pin, ghost: ghostSim });     // MLP lab: the target pin and the ghost (PID) drone
  *   view.rebuild(cfg);                              // after the airframe was edited (arm, rotors)
  *
  * Frames: the simulation is z-up (x east, y north); Three.js is y-up. A position (x, y, z) is drawn at
@@ -14,7 +15,7 @@ const toThree = (p) => new THREE.Vector3(p[0], p[2], -p[1]);
 const quatToThree = (q) => new THREE.Quaternion(q[1], q[3], -q[2], q[0]);   // THREE.Quaternion(x, y, z, w)
 
 /** The drone mesh, built from the airframe config so a design change shows up in the model. */
-function buildDrone(cfg) {
+function buildDrone(cfg, { ghost = false } = {}) {
   const M = cfg.motor, root = new THREE.Group();
   const s = M.arm / 0.225;                                    // scale details with the frame size
   const dark = new THREE.MeshStandardMaterial({ color: 0x23272e, roughness: 0.6, metalness: 0.3 });
@@ -72,7 +73,39 @@ function buildDrone(cfg) {
   };
   root.add(light(0x3fb950, 0.06 * s), light(0xff5555, -0.06 * s));
   root.userData = { props };
+  if (ghost) {                                                // see-through, no shadows: a comparison, not a body
+    root.traverse((o) => {
+      if (!o.material) return;
+      o.material = o.material.clone();
+      Object.assign(o.material, { transparent: true, opacity: Math.min(o.material.opacity, 0.3), depthWrite: false });
+      o.castShadow = false;
+    });
+  }
   return root;
+}
+
+/** The target pin: a head at the point, a thin stem down to the floor and a ring where it meets the floor. */
+function buildPin() {
+  const g = new THREE.Group(), color = 0xff7b72;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 14), new THREE.MeshStandardMaterial({ color, emissive: 0x5a1d1a, roughness: 0.4 }));
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45 }));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.13, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2;
+  head.castShadow = true;
+  g.add(head, stem, ring);
+  g.userData = { head, stem, ring };
+  return g;
+}
+
+/** Puts a drone mesh where a simulation's state says, and spins its propellers at the real rotor speed. */
+function pose(mesh, sim, discMax) {
+  mesh.position.copy(toThree(sim.state.p));
+  mesh.quaternion.copy(quatToThree(sim.state.q));
+  mesh.userData.props.forEach((prop, i) => {
+    const w = sim.motors.omega[i] || 0;
+    prop.rotation.y += prop.userData.spin * Math.min(w * 0.004, 1.2);   // slowed for the eye
+    prop.userData.disc.material.opacity = Math.min(discMax, w / 4000);  // a faint disc when they are fast
+  });
 }
 
 export function createView(container, cfg) {
@@ -117,6 +150,12 @@ export function createView(container, cfg) {
 
   let drone = buildDrone(cfg);
   scene.add(drone);
+  let ghost = buildDrone(cfg, { ghost: true });
+  ghost.visible = false;
+  scene.add(ghost);
+  const pinMesh = buildPin();
+  pinMesh.visible = false;
+  scene.add(pinMesh);
 
   // camera: 'chase' follows behind the heading; 'orbit' is dragged around the drone
   const cam = { mode: 'chase', yaw: 0.6, pitch: 0.35, dist: 3.2 };
@@ -144,21 +183,26 @@ export function createView(container, cfg) {
 
   return {
     camera: cam,
-    rebuild(newCfg) { scene.remove(drone); drone = buildDrone(newCfg); scene.add(drone); },
+    rebuild(newCfg) {
+      scene.remove(drone, ghost); drone = buildDrone(newCfg); ghost = buildDrone(newCfg, { ghost: true }); ghost.visible = false; scene.add(drone, ghost);
+    },
     clearTrail() { trailLen = 0; },
 
-    update(sim, { reference, showTrail = true } = {}) {
+    update(sim, { reference, showTrail = true, pin = null, ghost: ghostSim = null } = {}) {
       const s = sim.state, pos = toThree(s.p);
-      drone.position.copy(pos);
-      drone.quaternion.copy(quatToThree(s.q));
-      // propellers: spin at the real rotor speed (slowed for the eye), a faint disc when they are fast
-      drone.userData.props.forEach((prop, i) => {
-        const w = sim.motors.omega[i] || 0;
-        prop.rotation.y += prop.userData.spin * Math.min(w * 0.004, 1.2);
-        prop.userData.disc.material.opacity = Math.min(0.18, w / 4000);
-      });
+      pose(drone, sim, 0.18);
+      ghost.visible = !!ghostSim;
+      if (ghostSim) pose(ghost, ghostSim, 0.06);
+      // target pin (MLP lab); it replaces the setpoint ring
+      pinMesh.visible = !!pin;
+      if (pin) {
+        const p = toThree(pin), { head, stem, ring } = pinMesh.userData;
+        head.position.copy(p);
+        stem.scale.y = Math.max(0.001, p.y); stem.position.set(p.x, p.y / 2, p.z);
+        ring.position.set(p.x, 0.003, p.z);
+      }
       // reference marker
-      const ref = reference && reference.position;
+      const ref = !pin && reference && reference.position;
       marker.visible = !!ref;
       if (ref) marker.position.copy(toThree(ref));
       // trail
@@ -169,10 +213,15 @@ export function createView(container, cfg) {
         trailGeo.setDrawRange(0, trailLen);
         trailGeo.attributes.position.needsUpdate = true;
       }
-      // camera
+      // camera; with a pin in orbit mode it looks at the middle of drone and pin and backs off to see both
       const yaw = cam.mode === 'chase' ? Math.atan2(2 * (s.q[0] * s.q[3] + s.q[1] * s.q[2]), 1 - 2 * (s.q[2] ** 2 + s.q[3] ** 2)) + Math.PI : cam.yaw;
-      const target = pos.clone().add(new THREE.Vector3(0, 0.15, 0));
-      const off = new THREE.Vector3(Math.cos(yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), -Math.sin(yaw) * Math.cos(cam.pitch)).multiplyScalar(cam.dist);
+      let target = pos.clone().add(new THREE.Vector3(0, 0.15, 0)), dist = cam.dist;
+      if (pin && cam.mode === 'orbit') {
+        const p = toThree(pin);
+        target = pos.clone().lerp(p, 0.5);
+        dist = cam.dist + 0.9 * pos.distanceTo(p);
+      }
+      const off = new THREE.Vector3(Math.cos(yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), -Math.sin(yaw) * Math.cos(cam.pitch)).multiplyScalar(dist);
       camera.position.lerp(target.clone().add(off), cam.mode === 'chase' ? 0.12 : 1);
       if (camera.position.y < 0.15) camera.position.y = 0.15;
       camera.lookAt(target);

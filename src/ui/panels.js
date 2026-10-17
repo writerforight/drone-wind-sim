@@ -56,3 +56,18 @@ export function renderDesign(box, cfg, onChange) {
   };
 }
 const fmtNum = (v) => (Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(1) : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(3).replace(/0+$/, '').replace(/\.$/, ''));
+
+/** MLP lab: desired speed, the ghost switch and how to move the pin. Edits `lab` directly. */
+export function renderMlpLab(box, lab) {
+  box.innerHTML = `<label class="slider"><span>Speed</span>
+      <input id="mlpSpeed" type="range" min="0.2" max="5" step="0.1" value="${lab.speed}">
+      <output>${lab.speed.toFixed(1)} m/s</output></label>
+    <label class="check"><input id="ghostOn" type="checkbox"${lab.ghostOn ? ' checked' : ''}> Ghost PID drone (comparison only)</label>
+    <div class="muted small">Move the pin: <b>W/A/S/D</b> horizontal (as seen from the camera) · <b>↑/↓</b> up / down ·
+      Shift finer · drag the view to turn the camera, wheel to zoom. Touch: right stick horizontal, left stick up / down.</div>
+    <div class="muted small">The network that flies the main drone comes next; until then it rests on the floor.</div>`;
+  box.oninput = (e) => {
+    if (e.target.id === 'mlpSpeed') { lab.speed = +e.target.value; e.target.nextElementSibling.textContent = `${lab.speed.toFixed(1)} m/s`; }
+    if (e.target.id === 'ghostOn') lab.ghostOn = e.target.checked;
+  };
+}

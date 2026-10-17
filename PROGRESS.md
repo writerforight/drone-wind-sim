@@ -22,6 +22,20 @@ Log kept by the work loop (see SPEC.md). Newest entry at the bottom of "Log".
 
 (none — the M1 unit 3 hover-recovery issue is resolved, see the log)
 
+## MLP kontrolcü (owner's /loop, 2026-10-17)
+
+Tuning lab · MLP: the main drone is flown ONLY by an MLP that learns online; a see-through ghost PID drone flies the
+same pin at the same speed for comparison and never takes part in the learning. One phase per loop iteration, pushed.
+
+- [x] F1 — target pin (keyboard / sticks relative to the camera, orbit camera) + ghost PID drone (carrot at the set speed)
+- [ ] F2 — src/ml/mlp.js (MLP + backprop from mlp-space-deformation, finite-difference test)
+- [ ] F3 — network panel (layers, width, activation, lr, optimizer, σ, input boxes; fixed mixer A⁻¹ as output layer)
+- [ ] F4 — online learning: every control step, gradient from (L_t − L_{t−1})·ε/σ², backprop, update; reset on crash
+- [ ] F5 — metrics: L per step (MLP vs ghost), monotonicity %, crashes, explanation, README section
+
+Note: the unfinished M4 wind work (see "Open problems" on branch `wip-wind`) was parked as one local commit on
+`wip-wind` so it stays out of these commits; it is not pushed.
+
 ## Log
 
 - 2026-10-07 — Project created: SPEC.md, PROGRESS.md, LICENSE (MIT). No code yet. Tests: none yet.
@@ -39,3 +53,4 @@ Log kept by the work loop (see SPEC.md). Newest entry at the bottom of "Log".
   Tests: 19/19 in Node (incl. step metrics against first- and second-order formulas); browser smoke check (headless Firefox, 1400 and 500 px): menu, lab step (z +1 m: rise 1.18 s, overshoot 4.4 %, settling 4.17 s, steady error 0.1 cm), design edit, free-flight climb and forward flight, no JavaScript errors.
   Not verified: a real gamepad and a real touch screen (no hardware here).
 - 2026-10-07 — **M4 · unit 1/3: sensors.** `src/sensors/sensors.js`: gyro (white noise + constant bias), accelerometer (specific force in the body frame + noise), attitude as a noisy estimator output (no filter simulated — a stated simplification), position / velocity from a position system at its own rate (held between samples), one common delay (ring buffer). Levels `ideal | realistic | poor` in `src/config.js` (SENSOR_LEVELS), seeded random numbers (`src/util/random.js`). The loop builds the sensors from `cfg.sensors` and passes the true acceleration for the accelerometer. Tests: 24/24 (delay exact, gyro σ and bias statistics, position sample-and-hold, accelerometer reads +g at hover, hover with noisy sensors). RMS hover error over 15 s (seed 1): ideal 0.00 cm, realistic 0.81 cm, poor 4.56 cm. Open problems: none.
+- 2026-10-17 — **MLP kontrolcü · F1: target pin + ghost.** New mode `src/modes/mlp-lab.js` ("Tuning lab · MLP", third card): `movePin` (sticks → pin, forward = away from the camera, limits r ≤ 40 m, 0.3 ≤ z ≤ 15 m), `carrot` (the ghost's PID reference walks to the pin at the desired speed with a velocity feed-forward), `motorsOff` (main drone rests on the floor until the network exists). The ghost is its own `createSimulation` with the cascaded PID, ticked by the new optional mode hook `afterTick`. `render/scene.js`: see-through ghost mesh, pin (head, stem, floor ring), orbit camera centred between drone and pin. Panel: speed 0.2–5 m/s, ghost switch, help; touch sticks also shown in this mode. `app.resetSim(initial, { controller })`. Tests: 29/29 (5 new: camera-relative pin moves, limits, carrot speed/stop, motors-off rests, ghost reaches a far pin with cruise speed within 15 %). Browser (headless Firefox, 1400 and 500 px): all three modes run, keys move the pin, ghost reaches it (2 cm), main drone stays on the floor, ghost switch, no horizontal scroll, no JS errors.

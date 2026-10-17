@@ -12,7 +12,7 @@ main { position: relative; flex: 1; min-height: 0; display: grid; grid-template-
 #stage { grid-column: 1; grid-row: 1; position: relative; min-height: 0; }
 #stage canvas { width: 100%; height: 100%; display: block; }
 #hud { position: absolute; top: 10px; left: 12px; font: 12px ui-monospace, monospace; background: rgba(13,17,23,0.7); padding: 5px 9px; border-radius: 8px; pointer-events: none; }
-#labPanel { grid-column: 2; grid-row: 1 / span 2; width: 320px; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 14px; }
+#labPanel, #mlpPanel { grid-column: 2; grid-row: 1 / span 2; width: 320px; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px 14px; }
 .panel-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 650; margin: 10px 0 6px; }
 .btns { display: flex; gap: 6px; flex-wrap: wrap; }
 #stepResult { margin: 8px 0; min-height: 2.6em; } #analytic { margin-top: 6px; }
@@ -39,10 +39,12 @@ body.no-plots #plots { display: none; }
 .stick { position: absolute; bottom: 18px; width: 128px; height: 128px; border-radius: 50%; border: 2px solid rgba(230,237,243,0.25); background: rgba(22,27,34,0.45); touch-action: none; display: none; }
 .stick-left { left: 18px; } .stick-right { right: 18px; }
 .knob { position: absolute; left: 39px; top: 39px; width: 50px; height: 50px; border-radius: 50%; background: rgba(88,166,255,0.6); pointer-events: none; }
-@media (pointer: coarse) { body[data-mode="free"] .stick { display: block; } }
+@media (pointer: coarse) { body[data-mode="free"] .stick, body[data-mode="mlp"] .stick { display: block; } }
+.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; min-height: 32px; } .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+#mlpBox .small { margin: 6px 0; }
 @media (max-width: 820px) {
   main { grid-template-columns: 1fr; grid-template-rows: minmax(40dvh, 1fr) auto auto; }
-  #labPanel { grid-column: 1; grid-row: 3; width: auto; max-height: 30dvh; border-left: none; border-top: 1px solid var(--line); }
+  #labPanel, #mlpPanel { grid-column: 1; grid-row: 3; width: auto; max-height: 30dvh; border-left: none; border-top: 1px solid var(--line); }
   #plots { grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; } #plots canvas { height: 70px; }
   #modeName { display: none; }
   body[data-mode="free"] #plots { display: none; }

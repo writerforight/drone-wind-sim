@@ -12,7 +12,7 @@ import { stepMetrics } from './modes/tuning-lab.js';
 import { toEuler } from './physics/math3.js';
 import { createView } from './render/scene.js';
 import { createChart } from './ui/plots.js';
-import { renderDesign, renderGains } from './ui/panels.js';
+import { renderDesign, renderGains, renderMlpLab } from './ui/panels.js';
 
 const $ = (id) => document.getElementById(id);
 const deg = 180 / Math.PI;
@@ -36,8 +36,8 @@ const charts = {
   motors: createChart($('plotMotors'), { title: 'motors', unit: '% of ω_max', fixed: [0, 100], series: [{ name: 'FR', color: '#e3b341' }, { name: 'BL', color: '#e3b341' }, { name: 'FL', color: '#bc8cff' }, { name: 'BR', color: '#bc8cff' }] }),
 };
 
-app.resetSim = (initial) => {
-  app.controller = createCascadedPID(app.cfg.physics);
+app.resetSim = (initial, { controller } = {}) => {
+  app.controller = controller || createCascadedPID(app.cfg.physics);
   app.sim = createSimulation(app.cfg, { controller: app.controller, initial });
   app.step = null;
   Object.values(charts).forEach((c) => c.clear());
@@ -46,9 +46,10 @@ app.resetSim = (initial) => {
 
 /** After the airframe was edited: rebuild the blocks that precompute from it, keep the flight going. */
 function applyDesign() {
+  if (app.mode.id === 'mlp') { app.mode.start(app); view.rebuild(app.cfg); return; }   // the ghost precomputes from the airframe too
   const keep = app.sim ? { position: app.sim.state.p, velocity: app.sim.state.v, attitude: app.sim.state.q, rates: app.sim.state.w } : undefined;
   const ref = app.sim && app.sim.reference;
-  app.resetSim(keep);
+  app.resetSim(keep, { controller: app.controller });
   if (ref) app.sim.reference = ref;
   view.rebuild(app.cfg);
 }
@@ -75,6 +76,8 @@ function startMode() {
   $('modeName').textContent = `${m.name} · ${app.cfg.name}`;
   document.body.dataset.mode = m.id;
   $('labPanel').classList.toggle('hidden', !m.panels.includes('gains'));
+  $('mlpPanel').classList.toggle('hidden', !m.panels.includes('mlp'));
+  if (m.panels.includes('mlp')) renderMlpLab($('mlpBox'), app.lab);
   renderGains($('gainsBox'), app.cfg, () => {});
   renderSteps();
   app.paused = false;
@@ -120,6 +123,7 @@ function frame(now) {
       const sticks = input.read();
       app.sim.reference = app.mode.reference(app, sticks) || app.sim.reference;
       app.sim.tick();
+      if (app.mode.afterTick) app.mode.afterTick(app, sticks);
       const s = app.sim.state, ref = app.sim.reference;
       if (app.sim.steps % 5 === 0) {
         const e = ref.position ? [0, 1, 2].map((k) => ref.position[k] - s.p[k]) : [0, 0, 0];
@@ -133,7 +137,9 @@ function frame(now) {
       }
     }
   }
-  view.update(app.sim, { reference: app.sim.reference.position ? app.sim.reference : null });
+  const lab = app.mode.id === 'mlp' ? app.lab : null;
+  view.update(app.sim, { reference: app.sim.reference.position ? app.sim.reference : null,
+    pin: lab && lab.pin, ghost: lab && lab.ghostOn ? lab.ghost : null });
   if (++frames % 2 === 0) Object.values(charts).forEach((c) => c.draw());
   hud();
 }
@@ -141,7 +147,9 @@ function frame(now) {
 function hud() {
   const s = app.sim.state, e = toEuler(s.q).map((a) => a * deg);
   const sat = app.sim.command.saturated;
-  $('hud').innerHTML = `alt <b>${s.p[2].toFixed(2)}</b> m · speed <b>${Math.hypot(...s.v).toFixed(1)}</b> m/s · roll ${e[0].toFixed(0)}° pitch ${e[1].toFixed(0)}° yaw ${e[2].toFixed(0)}°${sat ? ' · <span class="warn">motors saturated</span>' : ''}`;
+  const lab = app.mode.id === 'mlp' ? app.lab : null;
+  const pinTxt = lab ? ` · pin (${lab.pin.map((x) => x.toFixed(1)).join(', ')}) · to pin <b>${Math.hypot(...lab.pin.map((x, k) => x - s.p[k])).toFixed(2)}</b> m` : '';
+  $('hud').innerHTML = `alt <b>${s.p[2].toFixed(2)}</b> m · speed <b>${Math.hypot(...s.v).toFixed(1)}</b> m/s · roll ${e[0].toFixed(0)}° pitch ${e[1].toFixed(0)}° yaw ${e[2].toFixed(0)}°${pinTxt}${sat ? ' · <span class="warn">motors saturated</span>' : ''}`;
 }
 
 // ---- keyboard shortcuts and touch sticks -----------------------------------------------------------------
@@ -154,6 +162,13 @@ window.addEventListener('keydown', (e) => {
 attachTouchSticks($('sticks'), input);
 $('camBtn').onclick = () => { view.camera.mode = view.camera.mode === 'chase' ? 'orbit' : 'chase'; };
 $('plotsBtn').onclick = () => document.body.classList.toggle('no-plots');
+
+/** The camera's orbit angle around its target (world x, y), so the pin moves "forward" away from the eye. */
+app.cameraYaw = () => {
+  if (view.camera.mode === 'orbit') return view.camera.yaw;
+  const q = app.sim.state.q;
+  return Math.atan2(2 * (q[0] * q[3] + q[1] * q[2]), 1 - 2 * (q[2] ** 2 + q[3] ** 2)) + Math.PI;
+};
 
 app.resetSim({ position: [0, 0, 0] });
 renderMenu();

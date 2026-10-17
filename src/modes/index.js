@@ -3,11 +3,13 @@
  *
  *   { id, name, description, camera: 'chase' | 'orbit', panels: [...],
  *     start(app),                 // put the drone where the mode begins
- *     reference(app, sticks) }    // the controller reference for this tick (from the sticks or a plan)
+ *     reference(app, sticks),     // the controller reference for this tick (from the sticks or a plan)
+ *     afterTick?(app, sticks) }   // optional: extra work every controller period (MLP lab: the ghost drone)
  *
  * A new mode (race, waypoints, a learned policy) is a new file plus one line in this list.
  */
 import { freeFlight } from './free-flight.js';
+import { mlpLab } from './mlp-lab.js';
 import { tuningLab } from './tuning-lab.js';
 
-export const modes = [freeFlight, tuningLab];
+export const modes = [freeFlight, tuningLab, mlpLab];
