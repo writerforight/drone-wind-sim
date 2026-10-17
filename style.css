@@ -50,3 +50,7 @@ body.no-plots #plots { display: none; }
   body[data-mode="free"] #plots { display: none; }
   header button { padding: 6px 10px; }
 }
+.netshape { font: 12px ui-monospace, monospace; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 4px 0 8px; }
+.netshape .fixed { color: var(--muted); border: 1px dashed var(--line); border-radius: 4px; padding: 0 4px; }
+.mono { font-family: ui-monospace, monospace; } #mlpOut { margin: 8px 0; min-height: 3em; overflow-wrap: anywhere; }
+#mlpBox .row { margin: 4px 0; } #mlpBox .check.small { margin: 2px 0; min-height: 26px; }

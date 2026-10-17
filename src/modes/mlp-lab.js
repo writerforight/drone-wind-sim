@@ -13,6 +13,7 @@
  */
 import { createCascadedPID } from '../controller/cascaded-pid.js';
 import { createSimulation } from '../loop/simulation.js';
+import { buildNet, createMlpController, defaultNetSettings } from '../ml/mlp-controller.js';
 
 export const PIN_SPEED = 2.0;                       // m/s, how fast the sticks move the pin
 export const PIN_LIMITS = { r: 40, zMin: 0.3, zMax: 15 };
@@ -54,23 +55,35 @@ export const mlpLab = {
   camera: 'orbit',
   panels: ['mlp', 'plots'],
   start(app) {
-    const L = (app.lab ||= { pin: DEFAULT_PIN.slice(), speed: 1.5, ghostOn: true });   // a restart keeps the pin
+    // a restart keeps the pin and the network settings
+    const L = (app.lab ||= { pin: DEFAULT_PIN.slice(), speed: 1.5, ghostOn: true, net: defaultNetSettings() });
+    rebuildNetwork(app);
     app.resetSim({ position: [0, 0, 0] }, { controller: motorsOff });
-    app.sim.reference = { position: L.pin.slice(), yaw: 0 };
+    app.sim.reference = { position: L.pin.slice(), speed: L.speed, yaw: 0 };
     L.ghost = createSimulation(app.cfg, { controller: createCascadedPID(app.cfg.physics), initial: { position: [0, 0, 0] } });
     L.ghost.reference = { position: [0, 0, 0], velocity: [0, 0, 0], yaw: 0 };
   },
   reference(app, sticks) {
     const L = app.lab;
     L.pin = movePin(L.pin, sticks, app.cameraYaw(), app.cfg.controller.dt);
-    return { position: L.pin.slice(), yaw: 0 };
+    return { position: L.pin.slice(), speed: L.speed, yaw: 0 };
   },
   /** After the main drone's tick: the ghost runs its own controller period. */
   afterTick(app) {
     const L = app.lab, g = L.ghost;
+    // what the (not yet flying) network would command right now
+    L.preview = L.controller.preview(app.sim.last ? app.sim.last.meas : app.sim.state, app.sim.reference);
     if (!L.ghostOn) return;
     const c = carrot(g.reference.position, L.pin, L.speed, app.cfg.controller.dt);
     g.reference = { position: c.position, velocity: c.velocity, yaw: 0 };
     g.tick();
   },
 };
+
+/** (Re)creates the network and its controller from the lab's settings (after a structural change in the panel). */
+export function rebuildNetwork(app) {
+  const L = app.lab;
+  L.netObj = buildNet(L.net);
+  L.controller = createMlpController(app.cfg.physics, L.netObj, L.net.inputs);
+  L.preview = null;
+}

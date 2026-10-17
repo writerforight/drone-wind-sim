@@ -7,7 +7,10 @@ import { cloneConfig, presets } from './config.js';
 import { createCascadedPID } from './controller/cascaded-pid.js';
 import { attachTouchSticks, createInput } from './input/input.js';
 import { createSimulation } from './loop/simulation.js';
+import { ACTIVATION_NAMES } from './ml/mlp.js';
+import { INPUT_GROUPS, OUTPUTS } from './ml/mlp-controller.js';
 import { modes } from './modes/index.js';
+import { rebuildNetwork } from './modes/mlp-lab.js';
 import { stepMetrics } from './modes/tuning-lab.js';
 import { toEuler } from './physics/math3.js';
 import { createView } from './render/scene.js';
@@ -77,7 +80,7 @@ function startMode() {
   document.body.dataset.mode = m.id;
   $('labPanel').classList.toggle('hidden', !m.panels.includes('gains'));
   $('mlpPanel').classList.toggle('hidden', !m.panels.includes('mlp'));
-  if (m.panels.includes('mlp')) renderMlpLab($('mlpBox'), app.lab);
+  if (m.panels.includes('mlp')) renderMlpLab($('mlpBox'), app.lab, { groups: INPUT_GROUPS, activations: ACTIVATION_NAMES, onRebuild: () => rebuildNetwork(app) });
   renderGains($('gainsBox'), app.cfg, () => {});
   renderSteps();
   app.paused = false;
@@ -149,6 +152,11 @@ function hud() {
   const sat = app.sim.command.saturated;
   const lab = app.mode.id === 'mlp' ? app.lab : null;
   const pinTxt = lab ? ` · pin (${lab.pin.map((x) => x.toFixed(1)).join(', ')}) · to pin <b>${Math.hypot(...lab.pin.map((x, k) => x - s.p[k])).toFixed(2)}</b> m` : '';
+  if (lab && lab.preview && frames % 6 === 0) {
+    const p = lab.preview, n = lab.netObj;
+    $('mlpOut').innerHTML = `${n.nParams} parameters · untrained output o = [${p.o.map((v) => v.toFixed(2)).join(', ')}] (${OUTPUTS.join(', ')})<br>
+      → T ${p.thrust.toFixed(2)} N (hover ${(app.cfg.physics.mass * app.cfg.physics.gravity).toFixed(2)}) · τ [${p.torque.map((v) => v.toFixed(3)).join(', ')}] N·m`;
+  }
   $('hud').innerHTML = `alt <b>${s.p[2].toFixed(2)}</b> m · speed <b>${Math.hypot(...s.v).toFixed(1)}</b> m/s · roll ${e[0].toFixed(0)}° pitch ${e[1].toFixed(0)}° yaw ${e[2].toFixed(0)}°${pinTxt}${sat ? ' · <span class="warn">motors saturated</span>' : ''}`;
 }
 

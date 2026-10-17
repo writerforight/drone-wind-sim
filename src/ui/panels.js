@@ -57,17 +57,56 @@ export function renderDesign(box, cfg, onChange) {
 }
 const fmtNum = (v) => (Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(1) : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(3).replace(/0+$/, '').replace(/\.$/, ''));
 
-/** MLP lab: desired speed, the ghost switch and how to move the pin. Edits `lab` directly. */
-export function renderMlpLab(box, lab) {
+/**
+ * MLP lab: desired speed, ghost switch, pin help, and the network: layers, width, activation, optimizer,
+ * learning rate, exploration noise σ and the input groups. Edits `lab` directly; a structural change (layers,
+ * width, activation, inputs) calls onRebuild() so the network is built anew.
+ */
+export function renderMlpLab(box, lab, { onRebuild = () => {}, groups = [], activations = [] } = {}) {
+  const N = lab.net, lrExp = Math.log10(N.lr);
+  const sel = (id, opts, v) => `<select id="${id}">${opts.map((o) => `<option${o === v ? ' selected' : ''}>${o}</option>`).join('')}</select>`;
   box.innerHTML = `<label class="slider"><span>Speed</span>
       <input id="mlpSpeed" type="range" min="0.2" max="5" step="0.1" value="${lab.speed}">
       <output>${lab.speed.toFixed(1)} m/s</output></label>
     <label class="check"><input id="ghostOn" type="checkbox"${lab.ghostOn ? ' checked' : ''}> Ghost PID drone (comparison only)</label>
     <div class="muted small">Move the pin: <b>W/A/S/D</b> horizontal (as seen from the camera) · <b>↑/↓</b> up / down ·
       Shift finer · drag the view to turn the camera, wheel to zoom. Touch: right stick horizontal, left stick up / down.</div>
-    <div class="muted small">The network that flies the main drone comes next; until then it rests on the floor.</div>`;
-  box.oninput = (e) => {
-    if (e.target.id === 'mlpSpeed') { lab.speed = +e.target.value; e.target.nextElementSibling.textContent = `${lab.speed.toFixed(1)} m/s`; }
-    if (e.target.id === 'ghostOn') lab.ghostOn = e.target.checked;
+    <div class="panel-title">Network</div>
+    <div id="netShape" class="netshape"></div>
+    <label class="slider"><span>Layers</span><input id="netLayers" type="range" min="1" max="4" step="1" value="${N.hidden.length}"><output>${N.hidden.length}</output></label>
+    <label class="slider"><span>Width</span><input id="netWidth" type="range" min="2" max="64" step="1" value="${N.hidden[0]}"><output>${N.hidden[0]}</output></label>
+    <label class="row small">Activation ${sel('netAct', activations, N.act)}</label>
+    <label class="row small">Optimizer ${sel('netOpt', ['adam', 'sgd'], N.optimizer)}</label>
+    <label class="slider"><span>Learn rate</span><input id="netLr" type="range" min="-5" max="-1" step="0.1" value="${lrExp}"><output>${N.lr.toExponential(0)}</output></label>
+    <label class="slider"><span>Noise σ</span><input id="netSigma" type="range" min="0.01" max="0.5" step="0.01" value="${N.sigma}"><output>${N.sigma.toFixed(2)}</output></label>
+    <div class="group-title">Inputs</div>
+    ${groups.map((g) => `<label class="check small"><input type="checkbox" data-in="${g.id}"${N.inputs[g.id] ? ' checked' : ''}> ${g.label} (${g.n})</label>`).join('')}
+    <div id="mlpOut" class="mono small"></div>
+    <div class="muted small">Learning comes next; until then the main drone rests on the floor and the box above shows what the untrained network would command.</div>`;
+  const shape = () => {
+    const nIn = groups.reduce((n, g) => n + (N.inputs[g.id] ? g.n : 0), 0);
+    box.querySelector('#netShape').innerHTML = `<b>${nIn}</b> → ${N.hidden.map((w) => `<b>${w}</b>`).join(' → ')} → <b>4</b> [T, τ] → <span class="fixed">fixed A⁻¹</span> → 4 motors`;
+  };
+  shape();
+  box.oninput = box.onchange = (e) => {
+    const el = e.target, out = el.nextElementSibling;
+    let rebuild = false;
+    if (el.id === 'mlpSpeed') { lab.speed = +el.value; out.textContent = `${lab.speed.toFixed(1)} m/s`; }
+    if (el.id === 'ghostOn') lab.ghostOn = el.checked;
+    if (el.id === 'netLayers' || el.id === 'netWidth') {
+      const n = +box.querySelector('#netLayers').value, w = +box.querySelector('#netWidth').value;
+      out.textContent = el.value;
+      if (n !== N.hidden.length || w !== N.hidden[0]) { N.hidden = Array(n).fill(w); rebuild = true; }
+    }
+    if (el.id === 'netAct' && el.value !== N.act) { N.act = el.value; rebuild = true; }
+    if (el.id === 'netOpt') N.optimizer = el.value;
+    if (el.id === 'netLr') { N.lr = 10 ** +el.value; out.textContent = N.lr.toExponential(0); }
+    if (el.id === 'netSigma') { N.sigma = +el.value; out.textContent = N.sigma.toFixed(2); }
+    if (el.dataset.in && e.type === 'change') {
+      N.inputs[el.dataset.in] = el.checked;
+      if (!Object.values(N.inputs).some(Boolean)) { N.inputs[el.dataset.in] = true; el.checked = true; return; }   // keep ≥ 1 input
+      rebuild = true;
+    }
+    if (rebuild && (e.type === 'change' || el.type === 'range')) { shape(); onRebuild(); }
   };
 }
