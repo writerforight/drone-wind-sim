@@ -10,7 +10,7 @@ import { createSimulation } from './loop/simulation.js';
 import { ACTIVATION_NAMES } from './ml/mlp.js';
 import { INPUT_GROUPS, OUTPUTS } from './ml/mlp-controller.js';
 import { modes } from './modes/index.js';
-import { rebuildNetwork } from './modes/mlp-lab.js';
+import { motorsOff, rebuildNetwork, startFlying } from './modes/mlp-lab.js';
 import { stepMetrics } from './modes/tuning-lab.js';
 import { toEuler } from './physics/math3.js';
 import { createView } from './render/scene.js';
@@ -80,7 +80,8 @@ function startMode() {
   document.body.dataset.mode = m.id;
   $('labPanel').classList.toggle('hidden', !m.panels.includes('gains'));
   $('mlpPanel').classList.toggle('hidden', !m.panels.includes('mlp'));
-  if (m.panels.includes('mlp')) renderMlpLab($('mlpBox'), app.lab, { groups: INPUT_GROUPS, activations: ACTIVATION_NAMES, onRebuild: () => rebuildNetwork(app) });
+  if (m.panels.includes('mlp')) renderMlpLab($('mlpBox'), app.lab, { groups: INPUT_GROUPS, activations: ACTIVATION_NAMES, onRebuild: () => rebuildNetwork(app),
+    onFly: () => startFlying(app), onLand: () => { const ref = app.sim.reference; app.lab.flying = false; app.resetSim({ position: [0, 0, 0] }, { controller: motorsOff }); app.sim.reference = ref; } });
   renderGains($('gainsBox'), app.cfg, () => {});
   renderSteps();
   app.paused = false;
@@ -156,6 +157,11 @@ function hud() {
     const p = lab.preview, n = lab.netObj;
     $('mlpOut').innerHTML = `${n.nParams} parameters · untrained output o = [${p.o.map((v) => v.toFixed(2)).join(', ')}] (${OUTPUTS.join(', ')})<br>
       → T ${p.thrust.toFixed(2)} N (hover ${(app.cfg.physics.mass * app.cfg.physics.gravity).toFixed(2)}) · τ [${p.torque.map((v) => v.toFixed(3)).join(', ')}] N·m`;
+  }
+  if (lab && frames % 6 === 0) {
+    const st = lab.learner && lab.learner.stats;
+    $('learnStats').innerHTML = !lab.flying ? 'on the floor — press ▶ to let the network fly' : !st ? '' :
+      `L <b>${st.L === null ? '—' : st.L.toFixed(2)}</b> · steps ${st.steps} · updates ${st.updates} · crashes <b>${st.crashes}</b>${st.lastCrash ? ` (last: ${st.lastCrash})` : ''} · this flight ${(st.episodeSteps * app.cfg.controller.dt).toFixed(1)} s · |g| ${st.gradNorm.toFixed(2)}`;
   }
   $('hud').innerHTML = `alt <b>${s.p[2].toFixed(2)}</b> m · speed <b>${Math.hypot(...s.v).toFixed(1)}</b> m/s · roll ${e[0].toFixed(0)}° pitch ${e[1].toFixed(0)}° yaw ${e[2].toFixed(0)}°${pinTxt}${sat ? ' · <span class="warn">motors saturated</span>' : ''}`;
 }

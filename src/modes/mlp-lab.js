@@ -14,6 +14,9 @@
 import { createCascadedPID } from '../controller/cascaded-pid.js';
 import { createSimulation } from '../loop/simulation.js';
 import { buildNet, createMlpController, defaultNetSettings } from '../ml/mlp-controller.js';
+import { createOnlineLearner, SPAWN } from '../ml/online-learner.js';
+import { createMotors } from '../motor/motors.js';
+import { createState } from '../physics/rigidbody.js';
 
 export const PIN_SPEED = 2.0;                       // m/s, how fast the sticks move the pin
 export const PIN_LIMITS = { r: 40, zMin: 0.3, zMax: 15 };
@@ -58,6 +61,7 @@ export const mlpLab = {
     // a restart keeps the pin and the network settings
     const L = (app.lab ||= { pin: DEFAULT_PIN.slice(), speed: 1.5, ghostOn: true, net: defaultNetSettings() });
     rebuildNetwork(app);
+    L.flying = false;
     app.resetSim({ position: [0, 0, 0] }, { controller: motorsOff });
     app.sim.reference = { position: L.pin.slice(), speed: L.speed, yaw: 0 };
     L.ghost = createSimulation(app.cfg, { controller: createCascadedPID(app.cfg.physics), initial: { position: [0, 0, 0] } });
@@ -73,6 +77,14 @@ export const mlpLab = {
     const L = app.lab, g = L.ghost;
     // what the (not yet flying) network would command right now
     L.preview = L.controller.preview(app.sim.last ? app.sim.last.meas : app.sim.state, app.sim.reference);
+    if (L.flying) {
+      if (L.learnOn) {
+        if (L.learner.optimizer !== L.net.optimizer) newLearner(L);   // optimizer switched in the panel
+        const r = L.learner.update(app.sim.state, app.sim.reference);
+        if (L.onStep) L.onStep(r, app);
+        if (r.crashed) respawn(app);
+      } else if (crashed(app)) respawn(app);
+    }
     if (!L.ghostOn) return;
     const c = carrot(g.reference.position, L.pin, L.speed, app.cfg.controller.dt);
     g.reference = { position: c.position, velocity: c.velocity, yaw: 0 };
@@ -86,4 +98,34 @@ export function rebuildNetwork(app) {
   L.netObj = buildNet(L.net);
   L.controller = createMlpController(app.cfg.physics, L.netObj, L.net.inputs);
   L.preview = null;
+  L.learner = null;
+  if (L.flying) startFlying(app);              // the simulation holds its controller: start a new flight
 }
+
+function newLearner(L) {
+  L.learner = createOnlineLearner(L.controller, L.net);
+  L.learner.optimizer = L.net.optimizer;
+}
+
+/** ▶ Fly: the network takes the main drone from the spawn point and (if learning is on) learns every step. */
+export function startFlying(app) {
+  const L = app.lab;
+  if (!L.learner) newLearner(L);
+  L.flying = true;
+  if (L.learnOn === undefined) L.learnOn = true;
+  const ref = app.sim.reference;
+  app.resetSim({ position: SPAWN }, { controller: L.controller });
+  app.sim.reference = ref;
+}
+
+/** Back to the spawn point after a crash: level, still, motors at hover speed. The weights stay. */
+export function respawn(app) {
+  const s = app.sim, P = app.cfg.physics, M = app.cfg.motor;
+  s.state = createState({ position: SPAWN });
+  s.motors = createMotors(M, Math.sqrt((P.mass * P.gravity) / (M.rotors.length * M.kThrust)));
+  s.acc = [0, 0, 0];
+  app.lab.controller.reset();
+  app.lab.episodes = (app.lab.episodes || 0) + 1;
+}
+
+const crashed = (app) => app.sim.state.p[2] <= 0.02 || 1 - 2 * (app.sim.state.q[1] ** 2 + app.sim.state.q[2] ** 2) < 0;

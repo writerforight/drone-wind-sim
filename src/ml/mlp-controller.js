@@ -33,7 +33,7 @@ const clip = (x, a) => Math.max(-a, Math.min(a, x));
 
 /** The default network settings (the panel edits a copy). */
 export const defaultNetSettings = () => ({
-  hidden: [16, 16], act: 'tanh', optimizer: 'adam', lr: 1e-3, sigma: 0.1, seed: 1,
+  hidden: [16, 16], act: 'tanh', optimizer: 'adam', lr: 1e-4, sigma: 0.05, seed: 1,
   inputs: Object.fromEntries(INPUT_GROUPS.map((g) => [g.id, true])),
 });
 

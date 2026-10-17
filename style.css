@@ -54,3 +54,4 @@ body.no-plots #plots { display: none; }
 .netshape .fixed { color: var(--muted); border: 1px dashed var(--line); border-radius: 4px; padding: 0 4px; }
 .mono { font-family: ui-monospace, monospace; } #mlpOut { margin: 8px 0; min-height: 3em; overflow-wrap: anywhere; }
 #mlpBox .row { margin: 4px 0; } #mlpBox .check.small { margin: 2px 0; min-height: 26px; }
+#learnStats { margin: 6px 0; min-height: 2.6em; overflow-wrap: anywhere; } .learn-btns { margin: 8px 0 4px; } button:disabled { opacity: 0.5; cursor: default; }

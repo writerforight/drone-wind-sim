@@ -62,7 +62,7 @@ const fmtNum = (v) => (Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(1) : Math
  * learning rate, exploration noise σ and the input groups. Edits `lab` directly; a structural change (layers,
  * width, activation, inputs) calls onRebuild() so the network is built anew.
  */
-export function renderMlpLab(box, lab, { onRebuild = () => {}, groups = [], activations = [] } = {}) {
+export function renderMlpLab(box, lab, { onRebuild = () => {}, onFly = () => {}, onLand = () => {}, groups = [], activations = [] } = {}) {
   const N = lab.net, lrExp = Math.log10(N.lr);
   const sel = (id, opts, v) => `<select id="${id}">${opts.map((o) => `<option${o === v ? ' selected' : ''}>${o}</option>`).join('')}</select>`;
   box.innerHTML = `<label class="slider"><span>Speed</span>
@@ -71,6 +71,10 @@ export function renderMlpLab(box, lab, { onRebuild = () => {}, groups = [], acti
     <label class="check"><input id="ghostOn" type="checkbox"${lab.ghostOn ? ' checked' : ''}> Ghost PID drone (comparison only)</label>
     <div class="muted small">Move the pin: <b>W/A/S/D</b> horizontal (as seen from the camera) · <b>↑/↓</b> up / down ·
       Shift finer · drag the view to turn the camera, wheel to zoom. Touch: right stick horizontal, left stick up / down.</div>
+    <div class="btns learn-btns"><button id="flyBtnMlp" class="primary">${lab.flying ? '■ Land' : '▶ Fly + learn'}</button>
+      <button id="learnBtn"${lab.flying ? '' : ' disabled'}>${lab.learnOn === false ? 'Learning off' : 'Learning on'}</button>
+      <button id="netResetBtn" title="New random weights">New weights</button></div>
+    <div id="learnStats" class="mono small"></div>
     <div class="panel-title">Network</div>
     <div id="netShape" class="netshape"></div>
     <label class="slider"><span>Layers</span><input id="netLayers" type="range" min="1" max="4" step="1" value="${N.hidden.length}"><output>${N.hidden.length}</output></label>
@@ -82,12 +86,24 @@ export function renderMlpLab(box, lab, { onRebuild = () => {}, groups = [], acti
     <div class="group-title">Inputs</div>
     ${groups.map((g) => `<label class="check small"><input type="checkbox" data-in="${g.id}"${N.inputs[g.id] ? ' checked' : ''}> ${g.label} (${g.n})</label>`).join('')}
     <div id="mlpOut" class="mono small"></div>
-    <div class="muted small">Learning comes next; until then the main drone rests on the floor and the box above shows what the untrained network would command.</div>`;
+    <div class="muted small">Every control step (250 Hz): noise ε ~ N(0, σ²) on the output → one step of physics →
+      L = |target − p| + |v − v_des| → gradient (L<sub>t</sub> − L<sub>t−1</sub>)·ε/σ² → backprop → one optimizer step.
+      No physics model, no teacher. A crash puts the drone back at the start; the weights stay.</div>`;
   const shape = () => {
     const nIn = groups.reduce((n, g) => n + (N.inputs[g.id] ? g.n : 0), 0);
     box.querySelector('#netShape').innerHTML = `<b>${nIn}</b> → ${N.hidden.map((w) => `<b>${w}</b>`).join(' → ')} → <b>4</b> [T, τ] → <span class="fixed">fixed A⁻¹</span> → 4 motors`;
   };
   shape();
+  box.onclick = (e) => {
+    const id = e.target.id;
+    if (id === 'flyBtnMlp') {
+      if (lab.flying) onLand(); else onFly();
+      e.target.textContent = lab.flying ? '■ Land' : '▶ Fly + learn';
+      box.querySelector('#learnBtn').disabled = !lab.flying;
+    }
+    if (id === 'learnBtn') { lab.learnOn = !lab.learnOn; e.target.textContent = lab.learnOn ? 'Learning on' : 'Learning off'; }
+    if (id === 'netResetBtn') { N.seed = (N.seed || 1) + 1; onRebuild(); }
+  };
   box.oninput = box.onchange = (e) => {
     const el = e.target, out = el.nextElementSibling;
     let rebuild = false;
